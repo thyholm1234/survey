@@ -9,7 +9,7 @@ pydantic-settings==2.7.0
 jsonschema==4.23.0
 numpy==2.2.1
 scipy==1.14.1
-pandas==2.2.3
+pandas==3.1.1
 statsmodels==0.14.4
 pyotp==2.9.0
 segno==1.6.1
