@@ -5,10 +5,12 @@ import logging
 import threading
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import get_settings
@@ -18,6 +20,18 @@ from .routers import admin_analyses, admin_auth, admin_dashboard, admin_exports,
 log = logging.getLogger("app")
 
 API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+# Frontend-CSP (tidligere sat af Caddy). Ingen inline-scripts, Trusted Types håndhævet.
+WEB_CSP = (
+    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; "
+    "connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; "
+    "frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types 'none'; "
+    "upgrade-insecure-requests; report-to csp"
+)
+PERMISSIONS_POLICY = (
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=(), "
+    "browsing-topics=(), focus-without-user-activation=()"
+)
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 MAX_BODY = 2 * 1024 * 1024 + 4096
 
@@ -77,13 +91,24 @@ def create_app() -> FastAPI:
         started = time.perf_counter()
         response = await call_next(request)
         h = response.headers
-        h.setdefault("Cache-Control", "no-store")
-        h.setdefault("Pragma", "no-cache")
-        h["Content-Security-Policy"] = API_CSP
+        if path.startswith("/api/"):
+            h.setdefault("Cache-Control", "no-store")
+            h.setdefault("Pragma", "no-cache")
+            h["Content-Security-Policy"] = API_CSP
+            h["Vary"] = "Cookie, Sec-Fetch-Site"
+        else:
+            # Statiske frontend-filer: html må aldrig caches, js/css skal revalideres
+            h["Cache-Control"] = "no-cache" if path.startswith(("/js/", "/css/")) else "no-store"
+            h["Content-Security-Policy"] = WEB_CSP
+            h["Reporting-Endpoints"] = 'csp="/api/csp-report"'
+        h["Strict-Transport-Security"] = f"max-age={s.hsts_max_age}; includeSubDomains"
         h["X-Content-Type-Options"] = "nosniff"
-        h["Cross-Origin-Resource-Policy"] = "same-origin"
+        h["X-Frame-Options"] = "DENY"
         h["Referrer-Policy"] = "no-referrer"
-        h["Vary"] = "Cookie, Sec-Fetch-Site"
+        h["Permissions-Policy"] = PERMISSIONS_POLICY
+        h["Cross-Origin-Opener-Policy"] = "same-origin"
+        h["Cross-Origin-Resource-Policy"] = "same-origin"
+        h["Cross-Origin-Embedder-Policy"] = "require-corp"
         # Ingen IP, cookies eller query i applikationsloggen
         log.info("%s %s %s %.0fms", request.method, path, response.status_code,
                  (time.perf_counter() - started) * 1000)
@@ -113,6 +138,10 @@ def create_app() -> FastAPI:
     for r in (respondent, admin_auth, admin_org, admin_surveys, admin_dashboard,
               admin_analyses, admin_exports, system):
         app.include_router(r.router)
+    # Frontend (vanilla HTML/JS) serveres af appen selv; TLS håndteres af ekstern reverse proxy.
+    # Monteres sidst, så /api/* altid rammer routerne. html=True giver /admin/ -> admin/index.html.
+    if FRONTEND_DIR.is_dir():
+        app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
     return app
 
 

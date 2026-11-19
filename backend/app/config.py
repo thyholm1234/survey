@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     public_host: str = "localhost"
     public_port: int = 443
+    hsts_max_age: int = 300
 
     db_host: str = "db"
     db_port: int = 3306

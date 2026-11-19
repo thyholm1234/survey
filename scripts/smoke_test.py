@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""End-to-end smoke-test mod den kørende stak (gennem Caddy/HTTPS).
+"""End-to-end smoke-test mod den kørende stak (gennem din reverse proxy/HTTPS).
 
 Brug:  python3 scripts/smoke_test.py --code XXXX-XXXX-XXXX [--admin demo.org --password ...]
-Kun standardbibliotek. Accepterer Caddys interne CA (kun til lokal test!).
+Kun standardbibliotek. Accepterer self-signed certifikater (kun til lokal test!).
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import http.cookiejar
 import json
+import os
 import ssl
 import struct
 import sys
@@ -20,7 +21,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE = "https://localhost:8443"
+BASE = os.environ.get("SMOKE_BASE", "https://localhost")
 
 
 class Client:

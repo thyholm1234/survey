@@ -12,10 +12,10 @@ teamets mestring, rammens kapacitet og almen tilhørighed på tværs af ti funkt
 ## Arkitektur
 
 ```
-Browser ──HTTPS──▶ Caddy (TLS, CSP/HSTS m.fl., statiske filer, IP-maskeret log)
-                     │  edge-netværk
-                     ▼
-                FastAPI / Uvicorn (2 workers)  ── qa_api ──┐
+Browser ──HTTPS──▶ Din reverse proxy (TLS) ──HTTP──▶ 127.0.0.1:8000
+                                                    │  edge-netværk
+                                                    ▼
+                FastAPI / Uvicorn (2 workers, statiske filer, CSP/HSTS m.fl.)  ── qa_api ──┐
                                                           │ backend-netværk (internal: true)
                 Analyse-worker (Python)        ── qa_worker┤
                 Migrate (Alembic, kortlivet)   ── qa_migrate
@@ -44,13 +44,20 @@ Krav: Docker med Compose v2, `openssl`.
 
 ```bash
 ./scripts/init-secrets.sh                 # genererer .env + MariaDB-krypteringsnøgler (secrets/)
-docker compose up -d --build              # db → migrate → api (2 workers) + worker → proxy
+docker compose up -d --build              # db → migrate → api (2 workers) + worker
 docker compose exec api python -m app.cli create-sysadmin <brugernavn>
 docker compose exec api python -m app.cli seed-demo     # valgfrit: SYNTETISK demo-tenant
 ```
 
-- Respondent: <https://localhost:8443/> (Caddys interne CA – accepter certifikatet lokalt)
-- Admin: <https://localhost:8443/admin/>
+Appen lytter på HTTP på `127.0.0.1:8000` (`APP_BIND`/`APP_PORT`). Peg din egen reverse proxy
+(TLS) derhen og sæt `PUBLIC_HOST`/`PUBLIC_PORT` til den offentlige adresse – den bruges til
+Origin-tjek, og cookies er `__Host-`/`Secure`, så login kræver HTTPS gennem proxyen.
+
+- Respondent: `https://<PUBLIC_HOST>/`
+- Admin: `https://<PUBLIC_HOST>/admin/`
+
+Krav til proxyen: videresend `X-Forwarded-For` og `X-Forwarded-Proto` (uvicorn stoler kun på dem fra
+`FORWARDED_ALLOW_IPS`), begræns request body til ~2 MB, og maskér/udelad IP og cookies i adgangsloggen.
 
 Engangsadgangskoder udskrives én gang. Ved første login opsættes TOTP (QR-kode) og adgangskoden skal
 skiftes (min. 14 tegn). `seed-demo` opretter `demo.org` (organisationsadmin med eksportret),
@@ -108,8 +115,8 @@ Svarværdier er reproducerbare ud fra seed `20241119`; id'er og tidsstempler gen
 
 ## Drift og deployment
 
-1. Sæt `PUBLIC_HOST` til det rigtige domæne og `HTTPS_PORT=443`, `HTTP_PORT=80` – Caddy henter
-   certifikat via ACME. Hosting skal ligge i EU/EØS.
+1. Sæt `PUBLIC_HOST` til det rigtige domæne (og `PUBLIC_PORT` hvis ikke 443); TLS/certifikat
+   håndteres af din reverse proxy. Hosting skal ligge i EU/EØS.
 2. Hæv `HSTS_MAX_AGE` gradvist (300 → 31536000).
 3. Erstat `.env`/`secrets/` med managed secrets (Docker/K8s secrets, Vault). Tag sikker backup af
    `secrets/mariadb-*` – uden dem kan databasen og backups ikke læses.

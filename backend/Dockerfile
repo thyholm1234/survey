@@ -27,6 +27,7 @@ COPY backend/alembic /app/alembic
 COPY backend/app /app/app
 COPY schema /app/schema
 COPY data/sample_almenramme_survey.json /app/data/sample_almenramme_survey.json
+COPY frontend /app/frontend
 USER 10001:10001
 EXPOSE 8000
 

@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
-const BASE = process.env.E2E_BASE || 'https://localhost:8443';
+const BASE = process.env.E2E_BASE || 'https://localhost';
 const CODE = process.env.E2E_CODE;
 const OUT = process.env.E2E_OUT || '/out';
 let failures = 0;
