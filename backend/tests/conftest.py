@@ -158,7 +158,7 @@ def insert_responses(tenant_id: str, unit_id: str, sv_id: str, n: int, seed: int
         for _ in range(n):
             theta = 3.5 + shift + rng.gauss(0, 0.8)
             r = Response(tenant_id=tenant_id, unit_id=unit_id, unit_type=unit.unit_type, survey_version_id=sv_id,
-                         seed=rng.getrandbits(32), block_order=["self", "team", "frame", "belong"],
+                         seed=rng.getrandbits(32), block_order=["self", "team", "frame", "expect"],
                          presentation_order=[q[1] for q in qs], app_version="test", status="completed",
                          completed_at=now, background={"profession": rng.choice(["paedagog", "laerer"])},
                          is_synthetic=True)

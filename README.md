@@ -2,12 +2,14 @@
 
 Generel webapp til import af psykometriske spørgeskemaer (JSON), udstedelse af adgangskoder til
 afdelinger, pseudonym besvarelse og psykometrisk analyse. Første instrument: oplevet egen mestring,
-teamets mestring, rammens kapacitet og almen tilhørighed på tværs af ti funktionsdomæner.
+teamets fælles mestring, om den nuværende ramme kan rumme situationen, og om det kan forventes af en almen
+ramme – på tværs af ti hverdagsdomæner med konkrete adfærdsudtryk (ikke diagnoser).
 
-> **Bemærk:** Specifikationens bilag `sample_almenramme_survey.json` var ikke vedlagt. Filen i
-> `data/` er en strukturelt tro **DEMO-rekonstruktion** (40 adfærdsbeskrivelser × 4 perspektiver = 160
-> spørgsmål, 10 domæner) genereret af `scripts/build_sample_survey.py`. Ordlyden er ikke valideret.
-> Erstat den med det rigtige instrument via admin-importen.
+> **Bemærk:** Instrumentet i `data/sample_almenramme_survey.json` (30 scenarier × 4 perspektiver = 120
+> spørgsmål, 10 domæner) er genereret af `scripts/build_sample_survey.py` efter retningslinjerne i
+> Shaughnessy m.fl., *Research Methods in Psychology* (2012), kap. 5. Det er **ikke pilottestet eller
+> valideret**. Se `docs/instrument.md` for konstrukt, adfærdsudtryk, begrundelse og de trin
+> (ekspertgennemgang, pretest), der mangler før reel brug.
 
 ## Arkitektur
 
@@ -144,5 +146,6 @@ Svarværdier er reproducerbare ud fra seed `20241119`; id'er og tidsstempler gen
 
 - `docs/data-model.md` – datamodeldiagram
 - `docs/threat-model.md` – trusselsmodel og sikkerhedskontroller
+- `docs/instrument.md` – instrumentets konstrukt, domæner, designvalg og validitetsplan
 - `docs/analysis-protocol.md` – analyseprotokol (scoring, missing, modeller, undertrykkelse)
 - `schema/survey.schema.json` – importformat

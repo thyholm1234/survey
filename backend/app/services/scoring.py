@@ -17,7 +17,7 @@ from scipy import stats
 
 SCORING_VERSION = "1.0.0"
 DEFAULT_SUBSCALE_THRESHOLD = 0.8
-DEFAULT_DOMAIN_THRESHOLD = 0.75
+DEFAULT_DOMAIN_THRESHOLD = 0.66  # 2 af 3 items pr. domæne x perspektiv
 
 
 @dataclass(frozen=True)

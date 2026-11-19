@@ -1,91 +1,119 @@
 #!/usr/bin/env python3
 """Genererer data/sample_almenramme_survey.json.
 
-BEMÆRK: Specifikationens bilag `sample_almenramme_survey.json` var ikke vedlagt.
-Denne fil er en strukturelt tro DEMO-rekonstruktion (40 adfærdsbeskrivelser,
-10 domæner, 4 perspektiver = 160 spørgsmål). Ordlyden er ikke valideret og
-skal erstattes af det rigtige instrument før reel brug.
+Instrument: personalets oplevelse af egen mestring, teamets fælles mestring, rammens kapacitet og
+om det kan forventes af en almen ramme – på tværs af 10 situationsdomæner. Hvert domæne har tre
+konkrete adfærdsbeskrivelser (ingen diagnoser) der spænder over opmærksomheds-/aktivitets-,
+social/fleksibilitets- og sprogrelaterede vanskeligheder. 30 scenarier x 4 perspektiver = 120 spørgsmål.
+
+Ordlyden er udarbejdet efter retningslinjerne i Shaughnessy, Zechmeister & Zechmeister (2012),
+kap. 5, men er IKKE pilottestet. Se docs/instrument.md og gennemfør pretest (trin 5) før reel brug.
+Kør: python3 scripts/build_sample_survey.py   (skriver og lint'er filen)
 """
 import json
 import pathlib
 
+# ---------------------------------------------------------------------------
+# 10 situationsdomæner x 3 adfærdsbeskrivelser = 30 scenarier.
+# Hvert scenarie er ét konkret, observerbart udtryk for adfærd – ingen diagnosenavne.
+# Nøglen til analyse (skjult for respondenten, kun i scenarioId-suffikset):
+#   _A = adfærd tæt på opmærksomheds-/aktivitets-/impulsregulering   (ADHD-nær)
+#   _S = adfærd tæt på socialt samspil, fleksibilitet og sanser       (autisme-nær)
+#   _K = adfærd tæt på sprogforståelse og sprogproduktion             (sprog-nær)
+# Se docs/instrument.md for begrundelse og analysebrug.
+# ---------------------------------------------------------------------------
+CLUSTERS = ["A", "S", "K"]
+
 DOMAINS = [
-    ("OA", "Opmærksomhed og aktivitetsregulering", [
-        "Barnet rejser sig gentagne gange under en fælles samling og går rundt i rummet.",
-        "Barnet skifter aktivitet efter få minutter og efterlader det påbegyndte.",
-        "Barnet taler eller råber ind i andres tale under en fælles aktivitet.",
-        "Barnet ser ud til ikke at opfatte en kollektiv besked og fortsætter sin aktivitet.",
+    ("FS", "Fælles samling og undervisning", [
+        "Under en fælles samling rejser barnet sig og går rundt, mens de andre sidder.",
+        "Under en fælles samling sætter barnet sig kun på sin faste plads og bliver urolig, hvis den er optaget.",
+        "Når barnet bliver spurgt under en fælles samling, svarer det kun med enkeltord eller peger.",
     ]),
-    ("ER", "Følelsesmæssig regulering", [
-        "Barnet græder eller råber længe, når en leg eller aktivitet slutter.",
-        "Barnet bliver hurtigt vredt, når noget ikke lykkes, og kaster med materialer.",
-        "Barnet har svært ved at falde til ro igen efter en konflikt.",
-        "Barnet reagerer kraftigt på små ændringer i stemningen i gruppen.",
+    ("SO", "Selvstændigt arbejde og opgaveløsning", [
+        "Barnet forlader sin opgave, før den er færdig, og går i gang med noget andet.",
+        "Barnet vil kun løse opgaven på én bestemt måde og afviser den voksnes forslag.",
+        "Barnet sidder med en opgave, det tydeligvis ikke forstår, men beder ikke om hjælp.",
     ]),
-    ("SI", "Socialt samspil og leg", [
-        "Barnet står ved siden af andres leg uden at komme ind i den.",
-        "Barnet overtager legen og bestemmer reglerne uden at lytte til de andre.",
-        "Barnet trækker sig, når andre børn tager kontakt.",
-        "Barnet misforstår ofte andre børns signaler og invitationer.",
+    ("OV", "Overgange og skift mellem aktiviteter", [
+        "Ved skift mellem aktiviteter glemmer barnet sine ting og kommer sidst afsted.",
+        "Når en aktivitet slutter, nægter barnet at stoppe og protesterer højlydt.",
+        "Ved skift mellem aktiviteter overhører barnet beskeden og bliver stående, til en voksen henvender sig direkte.",
     ]),
-    ("KO", "Kommunikation og sprog", [
-        "Barnet bruger få ord og peger eller trækker i den voksne for at vise, hvad det vil.",
-        "Barnet svarer ikke, når det bliver spurgt direkte i en gruppe.",
-        "Barnet gentager ord eller sætninger uden tydelig sammenhæng med situationen.",
-        "Barnet har svært ved at fortælle, hvad der er sket i en konflikt.",
+    ("LE", "Leg og samvær med andre børn", [
+        "I legen tager barnet legetøj eller springer ind i legen, før det er barnets tur.",
+        "Barnet leger ved siden af de andre børn, men ikke sammen med dem, selv når de inviterer.",
+        "I legen kan barnet ikke få de andre til at forstå, hvad det vil, og legen går i stå.",
     ]),
-    ("SE", "Sansebearbejdning", [
-        "Barnet holder sig for ørerne eller forlader rummet, når der er larm.",
-        "Barnet søger meget fysisk kontakt, fx skubber, krammer hårdt eller kravler.",
-        "Barnet undgår bestemte materialer, tøj eller madkonsistenser.",
-        "Barnet virker uopmærksomt på smerte, kulde eller varme.",
+    ("KO", "Konflikter og frustration", [
+        "Når barnet bliver irriteret, skubber eller råber det med det samme, før det har tænkt sig om.",
+        "Når et andet barn bryder en regel, bliver barnet stærkt oprevet og kan ikke give slip på det.",
+        "Efter en konflikt kan barnet ikke fortælle den voksne, hvad der skete.",
     ]),
-    ("FL", "Fleksibilitet og overgange", [
-        "Barnet protesterer kraftigt, når dagens plan ændres.",
-        "Barnet har svært ved at stoppe en aktivitet for at gå videre til den næste.",
-        "Barnet insisterer på at gøre tingene på en bestemt måde eller i en bestemt rækkefølge.",
-        "Barnet bliver uroligt ved ankomst og afhentning.",
+    ("IN", "Instruktioner og beskeder fra voksne", [
+        "Barnet går i gang, før instruktionen er givet færdig, og springer trin over.",
+        "Barnet tager talemåder og spøg bogstaveligt og bliver forvirret.",
+        "Barnet følger kun beskeder med ét led ad gangen og har brug for at få dem gentaget.",
     ]),
-    ("EF", "Igangsætning og organisering", [
-        "Barnet går ikke i gang med en opgave, selvom det har fået en instruktion.",
-        "Barnet mister overblikket over flere trin i en opgave.",
-        "Barnet glemmer ofte sine ting eller ved ikke, hvor de er.",
-        "Barnet har svært ved at vente på tur.",
+    ("RU", "Rutiner og praktiske situationer", [
+        "I en rutine som af- og påklædning glemmer barnet næste skridt og bliver midt i den.",
+        "Barnet vil have maden, pladsen eller rækkefølgen på samme måde hver gang og afviser alternativer.",
+        "Barnet kan ikke sige, hvad det har brug for ved spisning eller toiletbesøg, og bliver urolig.",
     ]),
-    ("MO", "Motorik og kropslig regulering", [
-        "Barnet falder eller støder ofte ind i ting og andre.",
-        "Barnet undgår aktiviteter med blyant, saks eller små materialer.",
-        "Barnet bevæger sig næsten konstant, også under stillesiddende aktiviteter.",
-        "Barnet bliver hurtigt træt i kroppen og lægger sig ned under aktiviteter.",
+    ("SA", "Støj, uro og sanseindtryk i miljøet", [
+        "Når der er uro i lokalet, bliver barnet opslugt af de andres aktivitet og mister sin egen opgave.",
+        "Ved høje lyde holder barnet sig for ørerne eller forlader rummet.",
+        "Når flere taler samtidig, kan barnet ikke følge med i, hvad der bliver sagt.",
     ]),
-    ("KA", "Konflikter og udadreagerende adfærd", [
-        "Barnet slår, sparker eller bider, når det bliver frustreret.",
-        "Barnet siger nej til de fleste voksenforslag og forhandler længe.",
-        "Barnet ødelægger andres ting eller byggerier.",
-        "Barnet bruger grimme ord eller trusler over for andre.",
+    ("FO", "Forandringer og det uventede", [
+        "Når noget spændende sker, forlader barnet den aftalte aktivitet og følger det i stedet.",
+        "Når en vikar kommer, eller planen ændres, bliver barnet så urolig, at det ikke kan deltage.",
+        "Barnet har brug for billeder eller fagter for at forstå, at dagens plan er ændret.",
     ]),
-    ("TA", "Tilbagetrækning og bekymring", [
-        "Barnet sidder ofte alene og deltager ikke i fælles aktiviteter.",
-        "Barnet spørger mange gange om det samme for at være sikker.",
-        "Barnet klager over ondt i maven eller hovedet før bestemte aktiviteter.",
-        "Barnet virker anspændt og stille i nye situationer.",
+    ("UD", "Selvudtryk og at blive forstået", [
+        "Barnet råber svaret ud eller taler i munden på andre, før det har fået ordet.",
+        "Barnet fortæller detaljeret om sit eget emne og lægger ikke mærke til, at lytteren mister interessen.",
+        "Barnet leder efter ord og opgiver at fortælle, når de andre ikke forstår det.",
     ]),
 ]
 
-QUESTION_TEMPLATES = {
-    "self": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-    "team": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-    "frame": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-    "belong": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+# Fire perspektiver = fire spørgsmål pr. scenarie. Hvert har en positivt og en negativt
+# formuleret variant (semantisk modsatrettet, ikke blot indsat "ikke"). Betingelsen står først,
+# og ingen sætning har mere end ét budskab (Shaughnessy et al., kap. 5).
+QUESTION_TEXTS = {
+    "self": (
+        "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+        "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+    ),
+    "team": (
+        "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
+        "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+    ),
+    "frame": (
+        "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
+        "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+    ),
+    "expect": (
+        "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
+        "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+    ),
 }
-PREFIX = {"self": "S", "team": "T", "frame": "F", "belong": "B"}
+PREFIX = {"self": "S", "team": "T", "frame": "F", "expect": "E"}
+PERSP_ORDER = list(QUESTION_TEXTS)
+
+
+def is_reversed(domain_idx: int, cluster_idx: int, persp_idx: int) -> bool:
+    """Deterministisk, ca. 1/3 negativt formulerede; fordeler sig jævnt på domæner og adfærdstyper
+    (så retning ikke er sammenfaldende med en bestemt adfærdstype eller et bestemt domæne)."""
+    return (domain_idx + cluster_idx + persp_idx) % 3 == 0
+
 
 survey = {
     "schemaVersion": "1.0.0",
     "surveyId": "almenramme",
-    "title": "Mestring og tilhørighed i almenmiljøet (DEMO)",
+    "title": "Mestring og rammer i almenmiljøet",
     "language": "da",
-    "description": "DEMO-rekonstruktion. Ikke valideret instrument.",
+    "description": "Spørgeskemaet beskriver konkrete situationer med børn i hverdagen. For hver situation bedes du vurdere din egen og teamets mestring, om de nuværende rammer kan rumme situationen, og om det kan forventes af en almen ramme. Vi spørger til adfærd, ikke til bestemte børn eller diagnoser. Der er ingen rigtige eller forkerte svar. Hvis du ikke har oplevet adfærden, eller ikke kan vurdere den, vælg Kan ikke vurdere.",
     "responseScale": {
         "type": "likert",
         "min": 1,
@@ -98,19 +126,19 @@ survey = {
             {"value": 5, "label": "Enig"},
             {"value": 6, "label": "Helt enig"},
         ],
-        "cannotAssess": {"code": "CANNOT_ASSESS", "label": "Kan ikke vurdere"},
+        "cannotAssess": {"code": "CANNOT_ASSESS", "label": "Kan ikke vurdere / har ikke oplevet"},
     },
     "perspectives": [
         {"code": "self", "name": "Min egen mestring",
-         "instruction": "Vurdér her din egen mulighed for at handle i situationen."},
+         "instruction": "Vurdér din egen mulighed for at handle, når du står i situationen. Tænk på adfærd, der optræder flere gange om ugen."},
         {"code": "team", "name": "Teamets fælles mestring",
-         "instruction": "Vurdér her dit teams fælles mulighed for at handle i situationen."},
-        {"code": "frame", "name": "Rammens kapacitet",
-         "instruction": "Vurdér her, om rammerne gør det muligt at handle i situationen."},
-        {"code": "belong", "name": "Almen tilhørighed",
-         "instruction": "Vurdér her, om et barn med denne adfærd hører til i fællesskabet."},
+         "instruction": "Vurdér det team, du arbejder sammen med omkring børnene (kolleger i stuen, klassen eller årgangen)."},
+        {"code": "frame", "name": "Den nuværende rammes kapacitet",
+         "instruction": "Ramme betyder tid, antal voksne, rum og materialer, som de er hos jer i dag. Vurdér, om jeres nuværende ramme kan rumme situationen."},
+        {"code": "expect", "name": "Hvad kan forventes af en almen ramme",
+         "instruction": "En almen ramme er en almindelig stue eller klasse med almindelig normering, uden ekstra ressourcer eller særlig støtte. Vurdér, hvad der med rimelighed kan forventes af en sådan ramme – uanset hvordan det ser ud hos jer."},
     ],
-    "fixedLastPerspective": "belong",
+    "fixedLastPerspective": "expect",
     "domains": [{"code": c, "name": n} for c, n, _ in DOMAINS],
     "backgroundVariables": [
         {"code": "profession", "label": "Faggruppe", "options": [
@@ -146,19 +174,46 @@ survey = {
     "items": [],
 }
 
-for code, _name, behaviors in DOMAINS:
-    for i, behavior in enumerate(behaviors, start=1):
-        sid = f"{code}{i:02d}"
-        survey["items"].append({
-            "scenarioId": sid,
-            "domainCode": code,
-            "behavior": behavior,
-            "questions": [
-                {"id": f"{PREFIX[p]}_{sid}", "perspective": p, "text": t, "reverseScored": False}
-                for p, t in QUESTION_TEMPLATES.items()
-            ],
-        })
+for d_idx, (code, _name, behaviors) in enumerate(DOMAINS):
+    assert len(behaviors) == len(CLUSTERS)
+    for c_idx, (cluster, behavior) in enumerate(zip(CLUSTERS, behaviors)):
+        sid = f"{code}_{cluster}"
+        questions = []
+        for p_idx, p in enumerate(PERSP_ORDER):
+            rev = is_reversed(d_idx, c_idx, p_idx)
+            questions.append({"id": f"{PREFIX[p]}_{sid}", "perspective": p,
+                              "text": QUESTION_TEXTS[p][1 if rev else 0], "reverseScored": rev})
+        survey["items"].append({"scenarioId": sid, "domainCode": code, "behavior": behavior,
+                                "questions": questions})
+
+
+def lint(doc: dict) -> list[str]:
+    """Mekanisk kontrol af retningslinjerne fra kap. 5. Advarsler kræver manuel vurdering."""
+    warns = []
+    vague = ("ofte", "nogle gange", "sommetider", "tit", "få minutter", "meget lidt", "normalt")
+    for it in doc["items"]:
+        texts = [("behavior", it["behavior"])] + [(q["id"], q["text"]) for q in it["questions"]]
+        for label, t in texts:
+            n = len(t.split())
+            if n > 20 and label != "behavior":
+                warns.append(f"{it['scenarioId']}/{label}: {n} ord (>20)")
+            if label == "behavior" and n > 22:
+                warns.append(f"{it['scenarioId']}: beskrivelse har {n} ord")
+            if any(v in t.lower() for v in vague):
+                warns.append(f"{it['scenarioId']}/{label}: vagt ord")
+            if any(w in t.lower() for w in ("autis", "adhd", "diagnos", "sprogforstyr", "handicap")):
+                warns.append(f"{it['scenarioId']}/{label}: diagnoseord")
+    # balance af retning
+    from collections import Counter
+    rev = Counter((q["perspective"], i["scenarioId"][-1]) for i in doc["items"] for q in i["questions"] if q["reverseScored"])
+    per = Counter(q["perspective"] for i in doc["items"] for q in i["questions"] if q["reverseScored"])
+    print("Negativt formulerede pr. perspektiv:", dict(per))
+    print("... pr. (perspektiv, adfærdstype):", dict(sorted(rev.items())))
+    return warns
+
 
 out = pathlib.Path(__file__).resolve().parent.parent / "data" / "sample_almenramme_survey.json"
 out.write_text(json.dumps(survey, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print(f"Skrev {out} ({len(survey['items'])} items, {sum(len(i['questions']) for i in survey['items'])} spørgsmål)")
+for w in lint(survey):
+    print("LINT:", w)

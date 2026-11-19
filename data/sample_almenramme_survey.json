@@ -1,9 +1,9 @@
 {
   "schemaVersion": "1.0.0",
   "surveyId": "almenramme",
-  "title": "Mestring og tilhørighed i almenmiljøet (DEMO)",
+  "title": "Mestring og rammer i almenmiljøet",
   "language": "da",
-  "description": "DEMO-rekonstruktion. Ikke valideret instrument.",
+  "description": "Spørgeskemaet beskriver konkrete situationer med børn i hverdagen. For hver situation bedes du vurdere din egen og teamets mestring, om de nuværende rammer kan rumme situationen, og om det kan forventes af en almen ramme. Vi spørger til adfærd, ikke til bestemte børn eller diagnoser. Der er ingen rigtige eller forkerte svar. Hvis du ikke har oplevet adfærden, eller ikke kan vurdere den, vælg Kan ikke vurdere.",
   "responseScale": {
     "type": "likert",
     "min": 1,
@@ -36,72 +36,72 @@
     ],
     "cannotAssess": {
       "code": "CANNOT_ASSESS",
-      "label": "Kan ikke vurdere"
+      "label": "Kan ikke vurdere / har ikke oplevet"
     }
   },
   "perspectives": [
     {
       "code": "self",
       "name": "Min egen mestring",
-      "instruction": "Vurdér her din egen mulighed for at handle i situationen."
+      "instruction": "Vurdér din egen mulighed for at handle, når du står i situationen. Tænk på adfærd, der optræder flere gange om ugen."
     },
     {
       "code": "team",
       "name": "Teamets fælles mestring",
-      "instruction": "Vurdér her dit teams fælles mulighed for at handle i situationen."
+      "instruction": "Vurdér det team, du arbejder sammen med omkring børnene (kolleger i stuen, klassen eller årgangen)."
     },
     {
       "code": "frame",
-      "name": "Rammens kapacitet",
-      "instruction": "Vurdér her, om rammerne gør det muligt at handle i situationen."
+      "name": "Den nuværende rammes kapacitet",
+      "instruction": "Ramme betyder tid, antal voksne, rum og materialer, som de er hos jer i dag. Vurdér, om jeres nuværende ramme kan rumme situationen."
     },
     {
-      "code": "belong",
-      "name": "Almen tilhørighed",
-      "instruction": "Vurdér her, om et barn med denne adfærd hører til i fællesskabet."
+      "code": "expect",
+      "name": "Hvad kan forventes af en almen ramme",
+      "instruction": "En almen ramme er en almindelig stue eller klasse med almindelig normering, uden ekstra ressourcer eller særlig støtte. Vurdér, hvad der med rimelighed kan forventes af en sådan ramme – uanset hvordan det ser ud hos jer."
     }
   ],
-  "fixedLastPerspective": "belong",
+  "fixedLastPerspective": "expect",
   "domains": [
     {
-      "code": "OA",
-      "name": "Opmærksomhed og aktivitetsregulering"
+      "code": "FS",
+      "name": "Fælles samling og undervisning"
     },
     {
-      "code": "ER",
-      "name": "Følelsesmæssig regulering"
+      "code": "SO",
+      "name": "Selvstændigt arbejde og opgaveløsning"
     },
     {
-      "code": "SI",
-      "name": "Socialt samspil og leg"
+      "code": "OV",
+      "name": "Overgange og skift mellem aktiviteter"
+    },
+    {
+      "code": "LE",
+      "name": "Leg og samvær med andre børn"
     },
     {
       "code": "KO",
-      "name": "Kommunikation og sprog"
+      "name": "Konflikter og frustration"
     },
     {
-      "code": "SE",
-      "name": "Sansebearbejdning"
+      "code": "IN",
+      "name": "Instruktioner og beskeder fra voksne"
     },
     {
-      "code": "FL",
-      "name": "Fleksibilitet og overgange"
+      "code": "RU",
+      "name": "Rutiner og praktiske situationer"
     },
     {
-      "code": "EF",
-      "name": "Igangsætning og organisering"
+      "code": "SA",
+      "name": "Støj, uro og sanseindtryk i miljøet"
     },
     {
-      "code": "MO",
-      "name": "Motorik og kropslig regulering"
+      "code": "FO",
+      "name": "Forandringer og det uventede"
     },
     {
-      "code": "KA",
-      "name": "Konflikter og udadreagerende adfærd"
-    },
-    {
-      "code": "TA",
-      "name": "Tilbagetrækning og bekymring"
+      "code": "UD",
+      "name": "Selvudtryk og at blive forstået"
     }
   ],
   "backgroundVariables": [
@@ -208,1241 +208,931 @@
   },
   "items": [
     {
-      "scenarioId": "OA01",
-      "domainCode": "OA",
-      "behavior": "Barnet rejser sig gentagne gange under en fælles samling og går rundt i rummet.",
+      "scenarioId": "FS_A",
+      "domainCode": "FS",
+      "behavior": "Under en fælles samling rejser barnet sig og går rundt, mens de andre sidder.",
       "questions": [
         {
-          "id": "S_OA01",
+          "id": "S_FS_A",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "T_OA01",
+          "id": "T_FS_A",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_OA01",
+          "id": "F_FS_A",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_OA01",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_FS_A",
+          "perspective": "expect",
+          "text": "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+          "reverseScored": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "FS_S",
+      "domainCode": "FS",
+      "behavior": "Under en fælles samling sætter barnet sig kun på sin faste plads og bliver urolig, hvis den er optaget.",
+      "questions": [
+        {
+          "id": "S_FS_S",
+          "perspective": "self",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+          "reverseScored": false
+        },
+        {
+          "id": "T_FS_S",
+          "perspective": "team",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
+          "reverseScored": false
+        },
+        {
+          "id": "F_FS_S",
+          "perspective": "frame",
+          "text": "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+          "reverseScored": true
+        },
+        {
+          "id": "E_FS_S",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "OA02",
-      "domainCode": "OA",
-      "behavior": "Barnet skifter aktivitet efter få minutter og efterlader det påbegyndte.",
+      "scenarioId": "FS_K",
+      "domainCode": "FS",
+      "behavior": "Når barnet bliver spurgt under en fælles samling, svarer det kun med enkeltord eller peger.",
       "questions": [
         {
-          "id": "S_OA02",
+          "id": "S_FS_K",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
           "reverseScored": false
         },
         {
-          "id": "T_OA02",
+          "id": "T_FS_K",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "F_OA02",
+          "id": "F_FS_K",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_OA02",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_FS_K",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "OA03",
-      "domainCode": "OA",
-      "behavior": "Barnet taler eller råber ind i andres tale under en fælles aktivitet.",
+      "scenarioId": "SO_A",
+      "domainCode": "SO",
+      "behavior": "Barnet forlader sin opgave, før den er færdig, og går i gang med noget andet.",
       "questions": [
         {
-          "id": "S_OA03",
+          "id": "S_SO_A",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
           "reverseScored": false
         },
         {
-          "id": "T_OA03",
+          "id": "T_SO_A",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_OA03",
+          "id": "F_SO_A",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+          "reverseScored": true
         },
         {
-          "id": "B_OA03",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_SO_A",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "OA04",
-      "domainCode": "OA",
-      "behavior": "Barnet ser ud til ikke at opfatte en kollektiv besked og fortsætter sin aktivitet.",
+      "scenarioId": "SO_S",
+      "domainCode": "SO",
+      "behavior": "Barnet vil kun løse opgaven på én bestemt måde og afviser den voksnes forslag.",
       "questions": [
         {
-          "id": "S_OA04",
+          "id": "S_SO_S",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
           "reverseScored": false
         },
         {
-          "id": "T_OA04",
+          "id": "T_SO_S",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "F_OA04",
+          "id": "F_SO_S",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_OA04",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_SO_S",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "ER01",
-      "domainCode": "ER",
-      "behavior": "Barnet græder eller råber længe, når en leg eller aktivitet slutter.",
+      "scenarioId": "SO_K",
+      "domainCode": "SO",
+      "behavior": "Barnet sidder med en opgave, det tydeligvis ikke forstår, men beder ikke om hjælp.",
       "questions": [
         {
-          "id": "S_ER01",
+          "id": "S_SO_K",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "T_ER01",
+          "id": "T_SO_K",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_ER01",
+          "id": "F_SO_K",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_ER01",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_SO_K",
+          "perspective": "expect",
+          "text": "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+          "reverseScored": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "OV_A",
+      "domainCode": "OV",
+      "behavior": "Ved skift mellem aktiviteter glemmer barnet sine ting og kommer sidst afsted.",
+      "questions": [
+        {
+          "id": "S_OV_A",
+          "perspective": "self",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+          "reverseScored": false
+        },
+        {
+          "id": "T_OV_A",
+          "perspective": "team",
+          "text": "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+          "reverseScored": true
+        },
+        {
+          "id": "F_OV_A",
+          "perspective": "frame",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
+          "reverseScored": false
+        },
+        {
+          "id": "E_OV_A",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "ER02",
-      "domainCode": "ER",
-      "behavior": "Barnet bliver hurtigt vredt, når noget ikke lykkes, og kaster med materialer.",
+      "scenarioId": "OV_S",
+      "domainCode": "OV",
+      "behavior": "Når en aktivitet slutter, nægter barnet at stoppe og protesterer højlydt.",
       "questions": [
         {
-          "id": "S_ER02",
+          "id": "S_OV_S",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "T_ER02",
+          "id": "T_OV_S",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_ER02",
+          "id": "F_OV_S",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_ER02",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_OV_S",
+          "perspective": "expect",
+          "text": "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+          "reverseScored": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "OV_K",
+      "domainCode": "OV",
+      "behavior": "Ved skift mellem aktiviteter overhører barnet beskeden og bliver stående, til en voksen henvender sig direkte.",
+      "questions": [
+        {
+          "id": "S_OV_K",
+          "perspective": "self",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+          "reverseScored": false
+        },
+        {
+          "id": "T_OV_K",
+          "perspective": "team",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
+          "reverseScored": false
+        },
+        {
+          "id": "F_OV_K",
+          "perspective": "frame",
+          "text": "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+          "reverseScored": true
+        },
+        {
+          "id": "E_OV_K",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "ER03",
-      "domainCode": "ER",
-      "behavior": "Barnet har svært ved at falde til ro igen efter en konflikt.",
+      "scenarioId": "LE_A",
+      "domainCode": "LE",
+      "behavior": "I legen tager barnet legetøj eller springer ind i legen, før det er barnets tur.",
       "questions": [
         {
-          "id": "S_ER03",
+          "id": "S_LE_A",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "T_ER03",
+          "id": "T_LE_A",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_ER03",
+          "id": "F_LE_A",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_ER03",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_LE_A",
+          "perspective": "expect",
+          "text": "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+          "reverseScored": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "LE_S",
+      "domainCode": "LE",
+      "behavior": "Barnet leger ved siden af de andre børn, men ikke sammen med dem, selv når de inviterer.",
+      "questions": [
+        {
+          "id": "S_LE_S",
+          "perspective": "self",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+          "reverseScored": false
+        },
+        {
+          "id": "T_LE_S",
+          "perspective": "team",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
+          "reverseScored": false
+        },
+        {
+          "id": "F_LE_S",
+          "perspective": "frame",
+          "text": "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+          "reverseScored": true
+        },
+        {
+          "id": "E_LE_S",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "ER04",
-      "domainCode": "ER",
-      "behavior": "Barnet reagerer kraftigt på små ændringer i stemningen i gruppen.",
+      "scenarioId": "LE_K",
+      "domainCode": "LE",
+      "behavior": "I legen kan barnet ikke få de andre til at forstå, hvad det vil, og legen går i stå.",
       "questions": [
         {
-          "id": "S_ER04",
+          "id": "S_LE_K",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
           "reverseScored": false
         },
         {
-          "id": "T_ER04",
+          "id": "T_LE_K",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "F_ER04",
+          "id": "F_LE_K",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_ER04",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_LE_K",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "SI01",
-      "domainCode": "SI",
-      "behavior": "Barnet står ved siden af andres leg uden at komme ind i den.",
-      "questions": [
-        {
-          "id": "S_SI01",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_SI01",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_SI01",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_SI01",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "SI02",
-      "domainCode": "SI",
-      "behavior": "Barnet overtager legen og bestemmer reglerne uden at lytte til de andre.",
-      "questions": [
-        {
-          "id": "S_SI02",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_SI02",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_SI02",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_SI02",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "SI03",
-      "domainCode": "SI",
-      "behavior": "Barnet trækker sig, når andre børn tager kontakt.",
-      "questions": [
-        {
-          "id": "S_SI03",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_SI03",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_SI03",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_SI03",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "SI04",
-      "domainCode": "SI",
-      "behavior": "Barnet misforstår ofte andre børns signaler og invitationer.",
-      "questions": [
-        {
-          "id": "S_SI04",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_SI04",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_SI04",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_SI04",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "KO01",
+      "scenarioId": "KO_A",
       "domainCode": "KO",
-      "behavior": "Barnet bruger få ord og peger eller trækker i den voksne for at vise, hvad det vil.",
+      "behavior": "Når barnet bliver irriteret, skubber eller råber det med det samme, før det har tænkt sig om.",
       "questions": [
         {
-          "id": "S_KO01",
+          "id": "S_KO_A",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
           "reverseScored": false
         },
         {
-          "id": "T_KO01",
+          "id": "T_KO_A",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_KO01",
+          "id": "F_KO_A",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+          "reverseScored": true
         },
         {
-          "id": "B_KO01",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_KO_A",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "KO02",
+      "scenarioId": "KO_S",
       "domainCode": "KO",
-      "behavior": "Barnet svarer ikke, når det bliver spurgt direkte i en gruppe.",
+      "behavior": "Når et andet barn bryder en regel, bliver barnet stærkt oprevet og kan ikke give slip på det.",
       "questions": [
         {
-          "id": "S_KO02",
+          "id": "S_KO_S",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
           "reverseScored": false
         },
         {
-          "id": "T_KO02",
+          "id": "T_KO_S",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "F_KO02",
+          "id": "F_KO_S",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_KO02",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_KO_S",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "KO03",
+      "scenarioId": "KO_K",
       "domainCode": "KO",
-      "behavior": "Barnet gentager ord eller sætninger uden tydelig sammenhæng med situationen.",
+      "behavior": "Efter en konflikt kan barnet ikke fortælle den voksne, hvad der skete.",
       "questions": [
         {
-          "id": "S_KO03",
+          "id": "S_KO_K",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "T_KO03",
+          "id": "T_KO_K",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_KO03",
+          "id": "F_KO_K",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_KO03",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_KO_K",
+          "perspective": "expect",
+          "text": "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+          "reverseScored": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "IN_A",
+      "domainCode": "IN",
+      "behavior": "Barnet går i gang, før instruktionen er givet færdig, og springer trin over.",
+      "questions": [
+        {
+          "id": "S_IN_A",
+          "perspective": "self",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+          "reverseScored": false
+        },
+        {
+          "id": "T_IN_A",
+          "perspective": "team",
+          "text": "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+          "reverseScored": true
+        },
+        {
+          "id": "F_IN_A",
+          "perspective": "frame",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
+          "reverseScored": false
+        },
+        {
+          "id": "E_IN_A",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "KO04",
-      "domainCode": "KO",
-      "behavior": "Barnet har svært ved at fortælle, hvad der er sket i en konflikt.",
+      "scenarioId": "IN_S",
+      "domainCode": "IN",
+      "behavior": "Barnet tager talemåder og spøg bogstaveligt og bliver forvirret.",
       "questions": [
         {
-          "id": "S_KO04",
+          "id": "S_IN_S",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "T_KO04",
+          "id": "T_IN_S",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_KO04",
+          "id": "F_IN_S",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_KO04",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_IN_S",
+          "perspective": "expect",
+          "text": "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+          "reverseScored": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "IN_K",
+      "domainCode": "IN",
+      "behavior": "Barnet følger kun beskeder med ét led ad gangen og har brug for at få dem gentaget.",
+      "questions": [
+        {
+          "id": "S_IN_K",
+          "perspective": "self",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+          "reverseScored": false
+        },
+        {
+          "id": "T_IN_K",
+          "perspective": "team",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
+          "reverseScored": false
+        },
+        {
+          "id": "F_IN_K",
+          "perspective": "frame",
+          "text": "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+          "reverseScored": true
+        },
+        {
+          "id": "E_IN_K",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "SE01",
-      "domainCode": "SE",
-      "behavior": "Barnet holder sig for ørerne eller forlader rummet, når der er larm.",
+      "scenarioId": "RU_A",
+      "domainCode": "RU",
+      "behavior": "I en rutine som af- og påklædning glemmer barnet næste skridt og bliver midt i den.",
       "questions": [
         {
-          "id": "S_SE01",
+          "id": "S_RU_A",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "T_SE01",
+          "id": "T_RU_A",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_SE01",
+          "id": "F_RU_A",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_SE01",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_RU_A",
+          "perspective": "expect",
+          "text": "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+          "reverseScored": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "RU_S",
+      "domainCode": "RU",
+      "behavior": "Barnet vil have maden, pladsen eller rækkefølgen på samme måde hver gang og afviser alternativer.",
+      "questions": [
+        {
+          "id": "S_RU_S",
+          "perspective": "self",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+          "reverseScored": false
+        },
+        {
+          "id": "T_RU_S",
+          "perspective": "team",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
+          "reverseScored": false
+        },
+        {
+          "id": "F_RU_S",
+          "perspective": "frame",
+          "text": "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+          "reverseScored": true
+        },
+        {
+          "id": "E_RU_S",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "SE02",
-      "domainCode": "SE",
-      "behavior": "Barnet søger meget fysisk kontakt, fx skubber, krammer hårdt eller kravler.",
+      "scenarioId": "RU_K",
+      "domainCode": "RU",
+      "behavior": "Barnet kan ikke sige, hvad det har brug for ved spisning eller toiletbesøg, og bliver urolig.",
       "questions": [
         {
-          "id": "S_SE02",
+          "id": "S_RU_K",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
           "reverseScored": false
         },
         {
-          "id": "T_SE02",
+          "id": "T_RU_K",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "F_SE02",
+          "id": "F_RU_K",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_SE02",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_RU_K",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "SE03",
-      "domainCode": "SE",
-      "behavior": "Barnet undgår bestemte materialer, tøj eller madkonsistenser.",
+      "scenarioId": "SA_A",
+      "domainCode": "SA",
+      "behavior": "Når der er uro i lokalet, bliver barnet opslugt af de andres aktivitet og mister sin egen opgave.",
       "questions": [
         {
-          "id": "S_SE03",
+          "id": "S_SA_A",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
           "reverseScored": false
         },
         {
-          "id": "T_SE03",
+          "id": "T_SA_A",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_SE03",
+          "id": "F_SA_A",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+          "reverseScored": true
         },
         {
-          "id": "B_SE03",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_SA_A",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "SE04",
-      "domainCode": "SE",
-      "behavior": "Barnet virker uopmærksomt på smerte, kulde eller varme.",
+      "scenarioId": "SA_S",
+      "domainCode": "SA",
+      "behavior": "Ved høje lyde holder barnet sig for ørerne eller forlader rummet.",
       "questions": [
         {
-          "id": "S_SE04",
+          "id": "S_SA_S",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
           "reverseScored": false
         },
         {
-          "id": "T_SE04",
+          "id": "T_SA_S",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "F_SE04",
+          "id": "F_SA_S",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_SE04",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_SA_S",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "FL01",
-      "domainCode": "FL",
-      "behavior": "Barnet protesterer kraftigt, når dagens plan ændres.",
+      "scenarioId": "SA_K",
+      "domainCode": "SA",
+      "behavior": "Når flere taler samtidig, kan barnet ikke følge med i, hvad der bliver sagt.",
       "questions": [
         {
-          "id": "S_FL01",
+          "id": "S_SA_K",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "T_FL01",
+          "id": "T_SA_K",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_FL01",
+          "id": "F_SA_K",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_FL01",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_SA_K",
+          "perspective": "expect",
+          "text": "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+          "reverseScored": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "FO_A",
+      "domainCode": "FO",
+      "behavior": "Når noget spændende sker, forlader barnet den aftalte aktivitet og følger det i stedet.",
+      "questions": [
+        {
+          "id": "S_FO_A",
+          "perspective": "self",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+          "reverseScored": false
+        },
+        {
+          "id": "T_FO_A",
+          "perspective": "team",
+          "text": "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+          "reverseScored": true
+        },
+        {
+          "id": "F_FO_A",
+          "perspective": "frame",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
+          "reverseScored": false
+        },
+        {
+          "id": "E_FO_A",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "FL02",
-      "domainCode": "FL",
-      "behavior": "Barnet har svært ved at stoppe en aktivitet for at gå videre til den næste.",
+      "scenarioId": "FO_S",
+      "domainCode": "FO",
+      "behavior": "Når en vikar kommer, eller planen ændres, bliver barnet så urolig, at det ikke kan deltage.",
       "questions": [
         {
-          "id": "S_FL02",
+          "id": "S_FO_S",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "T_FL02",
+          "id": "T_FO_S",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_FL02",
+          "id": "F_FO_S",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_FL02",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_FO_S",
+          "perspective": "expect",
+          "text": "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+          "reverseScored": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "FO_K",
+      "domainCode": "FO",
+      "behavior": "Barnet har brug for billeder eller fagter for at forstå, at dagens plan er ændret.",
+      "questions": [
+        {
+          "id": "S_FO_K",
+          "perspective": "self",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+          "reverseScored": false
+        },
+        {
+          "id": "T_FO_K",
+          "perspective": "team",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
+          "reverseScored": false
+        },
+        {
+          "id": "F_FO_K",
+          "perspective": "frame",
+          "text": "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+          "reverseScored": true
+        },
+        {
+          "id": "E_FO_K",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "FL03",
-      "domainCode": "FL",
-      "behavior": "Barnet insisterer på at gøre tingene på en bestemt måde eller i en bestemt rækkefølge.",
+      "scenarioId": "UD_A",
+      "domainCode": "UD",
+      "behavior": "Barnet råber svaret ud eller taler i munden på andre, før det har fået ordet.",
       "questions": [
         {
-          "id": "S_FL03",
+          "id": "S_UD_A",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, er jeg usikker på, hvad jeg skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "T_FL03",
+          "id": "T_UD_A",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
           "reverseScored": false
         },
         {
-          "id": "F_FL03",
+          "id": "F_UD_A",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_FL03",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_UD_A",
+          "perspective": "expect",
+          "text": "Når barnet viser denne adfærd, kræver det mere, end man med rimelighed kan forvente af en almen ramme.",
+          "reverseScored": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "UD_S",
+      "domainCode": "UD",
+      "behavior": "Barnet fortæller detaljeret om sit eget emne og lægger ikke mærke til, at lytteren mister interessen.",
+      "questions": [
+        {
+          "id": "S_UD_S",
+          "perspective": "self",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
+          "reverseScored": false
+        },
+        {
+          "id": "T_UD_S",
+          "perspective": "team",
+          "text": "Når barnet viser denne adfærd, handler vi i teamet ud fra en fælles tilgang.",
+          "reverseScored": false
+        },
+        {
+          "id": "F_UD_S",
+          "perspective": "frame",
+          "text": "Når barnet viser denne adfærd, sprænger det de nuværende rammer hos os.",
+          "reverseScored": true
+        },
+        {
+          "id": "E_UD_S",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]
     },
     {
-      "scenarioId": "FL04",
-      "domainCode": "FL",
-      "behavior": "Barnet bliver uroligt ved ankomst og afhentning.",
+      "scenarioId": "UD_K",
+      "domainCode": "UD",
+      "behavior": "Barnet leder efter ord og opgiver at fortælle, når de andre ikke forstår det.",
       "questions": [
         {
-          "id": "S_FL04",
+          "id": "S_UD_K",
           "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
+          "text": "Når barnet viser denne adfærd, ved jeg, hvad jeg kan gøre for at hjælpe barnet videre.",
           "reverseScored": false
         },
         {
-          "id": "T_FL04",
+          "id": "T_UD_K",
           "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
+          "text": "Når barnet viser denne adfærd, kan vi i teamet ikke blive enige om, hvad vi skal gøre.",
+          "reverseScored": true
         },
         {
-          "id": "F_FL04",
+          "id": "F_UD_K",
           "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
+          "text": "Med de nuværende rammer hos os kan vi rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         },
         {
-          "id": "B_FL04",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "EF01",
-      "domainCode": "EF",
-      "behavior": "Barnet går ikke i gang med en opgave, selvom det har fået en instruktion.",
-      "questions": [
-        {
-          "id": "S_EF01",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_EF01",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_EF01",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_EF01",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "EF02",
-      "domainCode": "EF",
-      "behavior": "Barnet mister overblikket over flere trin i en opgave.",
-      "questions": [
-        {
-          "id": "S_EF02",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_EF02",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_EF02",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_EF02",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "EF03",
-      "domainCode": "EF",
-      "behavior": "Barnet glemmer ofte sine ting eller ved ikke, hvor de er.",
-      "questions": [
-        {
-          "id": "S_EF03",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_EF03",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_EF03",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_EF03",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "EF04",
-      "domainCode": "EF",
-      "behavior": "Barnet har svært ved at vente på tur.",
-      "questions": [
-        {
-          "id": "S_EF04",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_EF04",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_EF04",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_EF04",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "MO01",
-      "domainCode": "MO",
-      "behavior": "Barnet falder eller støder ofte ind i ting og andre.",
-      "questions": [
-        {
-          "id": "S_MO01",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_MO01",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_MO01",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_MO01",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "MO02",
-      "domainCode": "MO",
-      "behavior": "Barnet undgår aktiviteter med blyant, saks eller små materialer.",
-      "questions": [
-        {
-          "id": "S_MO02",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_MO02",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_MO02",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_MO02",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "MO03",
-      "domainCode": "MO",
-      "behavior": "Barnet bevæger sig næsten konstant, også under stillesiddende aktiviteter.",
-      "questions": [
-        {
-          "id": "S_MO03",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_MO03",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_MO03",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_MO03",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "MO04",
-      "domainCode": "MO",
-      "behavior": "Barnet bliver hurtigt træt i kroppen og lægger sig ned under aktiviteter.",
-      "questions": [
-        {
-          "id": "S_MO04",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_MO04",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_MO04",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_MO04",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "KA01",
-      "domainCode": "KA",
-      "behavior": "Barnet slår, sparker eller bider, når det bliver frustreret.",
-      "questions": [
-        {
-          "id": "S_KA01",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_KA01",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_KA01",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_KA01",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "KA02",
-      "domainCode": "KA",
-      "behavior": "Barnet siger nej til de fleste voksenforslag og forhandler længe.",
-      "questions": [
-        {
-          "id": "S_KA02",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_KA02",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_KA02",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_KA02",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "KA03",
-      "domainCode": "KA",
-      "behavior": "Barnet ødelægger andres ting eller byggerier.",
-      "questions": [
-        {
-          "id": "S_KA03",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_KA03",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_KA03",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_KA03",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "KA04",
-      "domainCode": "KA",
-      "behavior": "Barnet bruger grimme ord eller trusler over for andre.",
-      "questions": [
-        {
-          "id": "S_KA04",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_KA04",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_KA04",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_KA04",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "TA01",
-      "domainCode": "TA",
-      "behavior": "Barnet sidder ofte alene og deltager ikke i fælles aktiviteter.",
-      "questions": [
-        {
-          "id": "S_TA01",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_TA01",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_TA01",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_TA01",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "TA02",
-      "domainCode": "TA",
-      "behavior": "Barnet spørger mange gange om det samme for at være sikker.",
-      "questions": [
-        {
-          "id": "S_TA02",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_TA02",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_TA02",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_TA02",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "TA03",
-      "domainCode": "TA",
-      "behavior": "Barnet klager over ondt i maven eller hovedet før bestemte aktiviteter.",
-      "questions": [
-        {
-          "id": "S_TA03",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_TA03",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_TA03",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_TA03",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
-          "reverseScored": false
-        }
-      ]
-    },
-    {
-      "scenarioId": "TA04",
-      "domainCode": "TA",
-      "behavior": "Barnet virker anspændt og stille i nye situationer.",
-      "questions": [
-        {
-          "id": "S_TA04",
-          "perspective": "self",
-          "text": "I en situation som denne ved jeg, hvad jeg kan gøre for at støtte barnets deltagelse.",
-          "reverseScored": false
-        },
-        {
-          "id": "T_TA04",
-          "perspective": "team",
-          "text": "I vores team har vi en fælles praksis for at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "F_TA04",
-          "perspective": "frame",
-          "text": "Vores rammer (tid, rum, personale og materialer) gør det muligt at støtte barnet i en situation som denne.",
-          "reverseScored": false
-        },
-        {
-          "id": "B_TA04",
-          "perspective": "belong",
-          "text": "Et barn, der viser denne adfærd, er en naturlig del af fællesskabet hos os.",
+          "id": "E_UD_K",
+          "perspective": "expect",
+          "text": "Det kan med rimelighed forventes, at en almen ramme kan rumme barnet, når det viser denne adfærd.",
           "reverseScored": false
         }
       ]

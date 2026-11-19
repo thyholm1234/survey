@@ -67,15 +67,15 @@ def totp(secret_b32: str, step_offset: int = 0) -> str:
 def respondent_flow(code: str) -> None:
     c = Client(BASE)
     _, intro = c.req("POST", "/api/respondent/access-code/verify", {"code": code})
-    assert intro["questions"] == 160, intro["questions"]
+    assert intro["questions"] == 120, intro["questions"]
     _, start = c.req("POST", "/api/respondent/sessions", {
         "ticket": intro["ticket"], "consent": True, "background": {"profession": "laerer"},
         "client": {"browserClass": "firefox", "screenClass": "l"}}, expect=(201,))
     rid, resume_key = start["responseId"], start["resumeKey"]
     _, st = c.req("GET", f"/api/respondent/sessions/{rid}/next")
     order = st["order"]
-    assert len(order) == 160 and order[-1]["perspective"] == "belong"
-    assert len({o["questionId"] for o in order}) == 160
+    assert len(order) == 120 and order[-1]["perspective"] == "expect"
+    assert len({o["questionId"] for o in order}) == 120
     first_order = [o["questionId"] for o in order]
     for pos in range(0, 10):
         c.req("POST", f"/api/respondent/sessions/{rid}/shown", {"positions": [pos]}, expect=(204,))

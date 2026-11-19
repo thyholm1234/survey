@@ -127,19 +127,21 @@ def seed_demo() -> None:
 
         # --- Syntetiske besvarelser (TYDELIGT MARKERET is_synthetic=1) --------------
         qrows = db.execute(
-            select(Question.id, Question.question_key, Subscale.code, Domain.code)
+            select(Question.id, Question.question_key, Subscale.code, Domain.code, Question.reverse_scored)
             .join(Subscale, Subscale.id == Question.subscale_id)
             .join(Scenario, Scenario.id == Question.scenario_id)
             .join(Domain, Domain.id == Scenario.domain_id)
             .where(Question.survey_version_id == sv.id)
         ).all()
         qid = {r[1]: r[0] for r in qrows}
+        reverse = {r[1] for r in qrows if r[4]}
         items = [Item(r[1], r[2], r[3]) for r in qrows]
         perspectives = [p["code"] for p in doc["perspectives"]]
         dom_eff = {d["code"]: rng.gauss(0, 0.35) for d in doc["domains"]}
         base = {("daycare", "self"): 4.3, ("daycare", "team"): 4.1, ("daycare", "frame"): 3.4,
-                ("daycare", "belong"): 4.6, ("school", "self"): 3.9, ("school", "team"): 3.7,
-                ("school", "frame"): 3.0, ("school", "belong"): 4.2}
+                ("daycare", "belong"): 4.6, ("daycare", "expect"): 3.6, ("school", "self"): 3.9,
+                ("school", "team"): 3.7, ("school", "frame"): 3.0, ("school", "belong"): 4.2,
+                ("school", "expect"): 3.3}
         bgvars = doc["backgroundVariables"]
         for (uname, _plain, code), u in zip(codes, units):
             unit_eff = rng.gauss(0, 0.25)
@@ -189,6 +191,8 @@ def seed_demo() -> None:
                     else:
                         x = 4 if straight else theta[it.perspective] + dom_eff[it.domain] + rng.gauss(0, 0.8)
                         value = int(min(6, max(1, round(x))))
+                        if it.question_id in reverse:  # negativt formuleret: rå værdi spejles
+                            value = 7 - value
                     db.add(Answer(response_id=r.id, question_id=qid[it.question_id], value=value,
                                   missing_code=miss, global_position=pos, block_index=bi, block_position=bp,
                                   first_shown_at=shown, answered_at=answered, rt_ms=rt,

@@ -52,13 +52,13 @@
         "additionalProperties": false,
         "required": ["code", "name"],
         "properties": {
-          "code": {"type": "string", "enum": ["self", "team", "frame", "belong"]},
+          "code": {"type": "string", "enum": ["self", "team", "frame", "belong", "expect"]},
           "name": {"$ref": "#/$defs/text200"},
           "instruction": {"$ref": "#/$defs/text2000"}
         }
       }
     },
-    "fixedLastPerspective": {"type": "string", "enum": ["self", "team", "frame", "belong"]},
+    "fixedLastPerspective": {"type": "string", "enum": ["self", "team", "frame", "belong", "expect"]},
     "domains": {
       "type": "array",
       "minItems": 1,
@@ -134,7 +134,7 @@
               "required": ["id", "perspective", "text"],
               "properties": {
                 "id": {"$ref": "#/$defs/code64"},
-                "perspective": {"type": "string", "enum": ["self", "team", "frame", "belong"]},
+                "perspective": {"type": "string", "enum": ["self", "team", "frame", "belong", "expect"]},
                 "text": {"$ref": "#/$defs/text2000"},
                 "reverseScored": {"type": "boolean", "default": false}
               }

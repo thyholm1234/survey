@@ -18,9 +18,9 @@ def doc():
 def test_sample_is_valid_and_preview(doc):
     assert survey_import.validate(doc) == []
     p = survey_import.preview(doc)
-    assert p["items"] == 40 and p["questions"] == 160 and p["domains"] == 10 and p["subscales"] == 4
-    assert p["questionsPerSubscale"] == {"self": 40, "team": 40, "frame": 40, "belong": 40}
-    assert p["reverseScored"] == 0
+    assert p["items"] == 30 and p["questions"] == 120 and p["domains"] == 10 and p["subscales"] == 4
+    assert p["questionsPerSubscale"] == {"self": 30, "team": 30, "frame": 30, "expect": 30}
+    assert p["reverseScored"] == 40  # ca. 1/3, jævnt fordelt (10 pr. perspektiv)
 
 
 @pytest.mark.parametrize("mutate,needle", [

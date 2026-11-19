@@ -27,7 +27,7 @@ def org(client):
     csrf = login(client, adm)
     r = client.post("/api/admin/surveys/import", json={"tenantId": t, "document": sample_doc(), "dryRun": True},
                     headers=H(csrf))
-    assert r.json()["valid"] and r.json()["preview"]["questions"] == 160
+    assert r.json()["valid"] and r.json()["preview"]["questions"] == 120
     r = client.post("/api/admin/surveys/import", json={"tenantId": t, "document": sample_doc(), "dryRun": False},
                     headers=H(csrf))
     sv = r.json()["surveyVersionId"]
@@ -93,7 +93,7 @@ def test_full_respondent_flow_and_resume(client, org):
         rid = start["responseId"]
         st = resp_client.get(f"/api/respondent/sessions/{rid}/next").json()
         order = st["order"]
-        assert len(order) == 160 and {o["perspective"] for o in order[-40:]} == {"belong"}
+        assert len(order) == 120 and {o["perspective"] for o in order[-30:]} == {"expect"}
         # ikke vist endnu -> 409
         q = order[0]["questionId"]
         assert resp_client.put(f"/api/respondent/sessions/{rid}/answers/{q}", json={"value": 3, "seq": 1}).status_code == 409
@@ -128,7 +128,7 @@ def test_full_respondent_flow_and_resume(client, org):
         assert m == "CANNOT_ASSESS"
         resp = c.execute(text(f"SELECT seed, block_order, survey_version_id FROM {qualified('qa_data', 'responses')} "
                               "WHERE id=:r"), {"r": rid}).one()
-        assert resp.seed and "belong" in resp.block_order and resp.survey_version_id == org["sv"]
+        assert resp.seed and "expect" in resp.block_order and resp.survey_version_id == org["sv"]
 
 
 def test_one_time_code_single_use(client, org):
@@ -249,7 +249,7 @@ def test_export_and_analysis_reproducible(client, org):
     assert r1.status_code == 200 and r1.headers["X-Data-SHA256"] == r2.headers["X-Data-SHA256"]
     csv = r1.text
     assert csv.splitlines()[0].startswith("response_id,unit_id,institution_id,unit_type,question_key")
-    assert len(csv.splitlines()) == 30 * 160 + 1
+    assert len(csv.splitlines()) == 30 * 120 + 1
     # analysekørsel på samme filtre -> samme datahash (protokollen reproducerer eksporten)
     r = client.post("/api/admin/analyses", json={"tenantId": t, "kind": "group_comparison",
                                                  "filters": {"surveyVersionId": sv}}, headers=H(org["csrf"]))

@@ -13,7 +13,7 @@ med samme filtre giver samme hash som analysekørslen, hvilket dokumenterer repr
 - Itemscore = rå værdi 1–6; reverse: `max + min − rå`.
 - `CANNOT_ASSESS`, `NOT_ANSWERED` og `NOT_REACHED` er missing – aldrig midtpunkt eller 0.
 - Subskalascore = middel af gyldige items, hvis andel gyldige ≥ 0,80 (konfigurerbar, rapporteres).
-- Domænescore pr. subskala = middel af gyldige items, hvis andel ≥ 0,75 (dvs. 3 af 4 items).
+- Domænescore pr. subskala = middel af gyldige items, hvis andel ≥ 0,66 (dvs. 2 af 3 items; instrumentet har 3 scenarier pr. domæne).
 - Ingen totalscore.
 - Deskriptiv statistik: N, gyldige, missing %, middel, SD, median, IQR, 95 % t-baseret CI.
 - Svartid: server-målt fra første visning til første svar; øvre winsorisering (99. percentil) kun i analyse.
