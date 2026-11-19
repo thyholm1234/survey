@@ -138,7 +138,8 @@ async function loadTenantData() {
   ]);
 }
 function publishedVersions() {
-  return app.surveys.flatMap((sv) => sv.versions.filter((v) => v.status === 'published').map((v) => ({ ...v, title: sv.title })));
+  return app.surveys.flatMap((sv) => sv.versions.filter((v) => v.status === 'published')
+    .map((v) => ({ ...v, title: sv.title, assignedUnitIds: sv.assignedUnitIds || [] })));
 }
 function versionSelect(id = 'sv-select') {
   return h('select', { id, required: true }, publishedVersions().map((v) => h('option', { value: v.id, text: `${v.title} v${v.versionNo}` })));
@@ -390,6 +391,7 @@ function surveysTab(panel) {
     if (r) renderPreview(result, r, doc);
   });
   panel.append(heading('surveys', 'Spørgeskemaer'), h('section', { class: 'card' }, h('h3', { text: 'Importér' }), form, result),
+    assignmentSection(),
     h('section', { class: 'card' }, h('h3', { text: 'Versioner' }), table('Versioner', ['Spørgeskema', 'Version', 'Status', 'Importeret', 'SHA-256', ''],
       app.surveys.flatMap((sv) => sv.versions.map((v) => row(`${sv.title} (${sv.surveyId})`, [String(v.versionNo), v.status,
         new Date(v.importedAt).toLocaleString('da-DK'), v.sha256.slice(0, 12) + '…',
@@ -398,6 +400,41 @@ function surveysTab(panel) {
           await guard(() => api('POST', `/api/admin/surveys/${v.id}/publish`, {}));
           await loadTenantData(); shell();
         } }) : '')]))))));
+}
+
+/** Tildeling af spørgeskemaer til institutioner. Fratagelse stopper nye koder, men sletter intet. */
+function assignmentSection() {
+  const insts = app.units.filter((u) => !u.parentId).sort((a, b) => a.name.localeCompare(b.name, 'da'));
+  const intro = h('p', { class: 'hint', text: 'Spørgeskemaerne ligger i biblioteket og kan tildeles de institutioner, der skal bruge dem. '
+    + 'Der kan kun udstedes adgangskoder til institutioner (og deres afdelinger/klasser), som spørgeskemaet er tildelt. '
+    + 'Fratager du et spørgeskema, kan der ikke laves nye koder, men allerede udleverede koder og indsamlede svar berøres ikke.' });
+  if (!app.surveys.length) return h('section', { class: 'card' }, h('h3', { text: 'Tildeling til institutioner' }), intro,
+    h('p', { class: 'notice', text: 'Importér et spørgeskema først.' }));
+  if (!insts.length) return h('section', { class: 'card' }, h('h3', { text: 'Tildeling til institutioner' }), intro,
+    h('p', { class: 'notice', text: 'Opret først institutioner under Institutioner.' }));
+  const forms = app.surveys.map((s) => {
+    const e = err(`asg-err-${s.id}`);
+    const assigned = new Set(s.assignedUnitIds || []);
+    const boxes = insts.map((i) => {
+      const id = `asg-${s.id}-${i.id}`;
+      return h('label', { class: 'check', for: id }, h('input', { type: 'checkbox', id, value: i.id, checked: assigned.has(i.id) }),
+        ` ${i.name} (${UNIT_TYPES[i.unitType]})`);
+    });
+    const published = s.versions.some((v) => v.status === 'published');
+    const f = h('form', { method: 'post', action: '/admin/' },
+      h('fieldset', {}, h('legend', { text: `${s.title} (${s.surveyId})` }),
+        published ? null : h('p', { class: 'hint', text: 'Ingen publiceret version endnu – koder kræver en publiceret version.' }),
+        h('div', { class: 'check-list' }, boxes)), e,
+      h('button', { type: 'submit', class: 'secondary', text: 'Gem tildeling' }));
+    f.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const unitIds = boxes.map((b) => b.querySelector('input')).filter((x) => x.checked).map((x) => x.value);
+      const r = await guard(() => api('PUT', `/api/admin/surveys/${s.id}/assignments`, { unitIds }), e);
+      if (r) { s.assignedUnitIds = r.assignedUnitIds; announce(`Tildeling gemt for ${s.title}`); }
+    });
+    return f;
+  });
+  return h('section', { class: 'card' }, h('h3', { text: 'Tildeling til institutioner' }), intro, forms);
 }
 
 function renderPreview(out, r, doc) {
@@ -459,13 +496,18 @@ function unitsTab(panel) {
         h('td', { text: 'Afdeling/klasse' }), h('td', { text: UNIT_TYPES[u.unitType] }), h('td', { text: u.status }),
         org ? h('td', {}, removeBtn(u)) : null)
     : row(u.name, ['Institution', UNIT_TYPES[u.unitType], u.status, ...(org ? [''] : [])]));
+  const assignedTitles = (instId) => app.surveys.filter((s) => (s.assignedUnitIds || []).includes(instId)).map((s) => s.title).join(', ') || '–';
+  rows.forEach((tr, i) => {
+    const u = unitsSorted()[i];
+    tr.children[3].after(h('td', { text: u.parentId ? '' : assignedTitles(u.id) }));
+  });
   panel.append(heading('units', 'Institutioner og afdelinger'),
     h('p', { class: 'hint', text: 'Opret først institutionen (skole, dagtilbud …) og derefter dens afdelinger eller klasser. '
       + 'Resultater kan ses samlet for institutionen og sammenlignet mellem dens afdelinger/klasser. '
       + 'Adgangskoder kan udstedes til en afdeling/klasse eller til hele institutionen.' }),
     org ? h('section', { class: 'card' }, h('h3', { text: 'Ny institution' }), instForm) : null,
     org && insts.length ? h('section', { class: 'card' }, h('h3', { text: 'Ny afdeling eller klasse' }), subForm) : null,
-    table('Institutioner og afdelinger', ['Navn', 'Niveau', 'Type', 'Status', ...(org ? ['Handling'] : [])], rows));
+    table('Institutioner og afdelinger', ['Navn', 'Niveau', 'Type', 'Status', 'Spørgeskemaer', ...(org ? ['Handling'] : [])], rows));
 }
 
 // ------------------------------------------------------------------ Koder
@@ -489,8 +531,25 @@ async function codesTab(panel) {
     const name = u.parentId
       ? [h('span', { class: 'indent', 'aria-hidden': 'true', text: '└ ' }), u.name]
       : [u.name, hasKids.has(u.id) ? h('span', { class: 'hint', text: ' (hele institutionen)' }) : null];
-    return h('tr', { class: u.parentId ? 'child' : '' }, h('th', { scope: 'row' }, ...name), h('td', {}, inp));
+    const tr = h('tr', { class: u.parentId ? 'child' : '' }, h('th', { scope: 'row' }, ...name), h('td', {}, inp));
+    tr.dataset.inst = u.parentId || u.id;
+    return tr;
   });
+  // Kun institutioner, som det valgte spørgeskema er tildelt (og deres afdelinger/klasser), vises
+  const noneAssigned = h('p', { class: 'notice', hidden: true,
+    text: 'Spørgeskemaet er ikke tildelt nogen institution. Tildel det under Spørgeskemaer.' });
+  const applyAssignment = () => {
+    const v = publishedVersions().find((x) => x.id === sv.value);
+    const ok = new Set(v ? v.assignedUnitIds : []);
+    for (const tr of countRows) {
+      const show = ok.has(tr.dataset.inst);
+      tr.hidden = !show;
+      if (!show) tr.querySelector('input').value = '';
+    }
+    noneAssigned.hidden = ok.size > 0;
+    updateTotal();
+  };
+  sv.addEventListener('change', applyAssignment);
   const btn = h('button', { type: 'submit' }, icon('download', 'icon-sm'), 'Generér koder og hent PDF');
   const form = h('form', { method: 'post', action: '/admin/' },
     h('p', { class: 'hint', text: 'Hver kode er personlig og giver én besvarelse. Deltageren kan logge ind igen med koden for at '
@@ -498,7 +557,7 @@ async function codesTab(panel) {
       + 'og derefter én side pr. kode med vejledning, kode og QR-kode. Højst 1000 koder ad gangen.' }),
     h('div', { class: 'filters' }, field('Spørgeskema', sv), field('Gyldig til', validTo, 'Tom = 60 dage'),
       field('Etiket (valgfri)', label, 'Fx "Forår 2027"')),
-    table('Antal koder pr. afdeling', ['Institution / afdeling', 'Antal'], countRows),
+    noneAssigned, table('Antal koder pr. afdeling', ['Institution / afdeling', 'Antal'], countRows),
     h('p', {}, 'Koder i alt: ', total), e, btn);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -534,6 +593,7 @@ async function codesTab(panel) {
   };
   panel.append(heading('codes', 'Adgangskoder'),
     units.length ? h('section', { class: 'card' }, form) : h('p', { class: 'notice', text: 'Opret først institutioner og afdelinger.' }), list);
+  applyAssignment();
   refresh();
 }
 

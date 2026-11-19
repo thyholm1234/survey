@@ -29,6 +29,7 @@ from ..models import (
     Scenario,
     Subscale,
     Survey,
+    SurveyAssignment,
     SurveyVersion,
     Tenant,
     User,
@@ -135,7 +136,7 @@ def delete_tenant(tenant_id: str, body: TenantDeleteIn, p: Principal = Depends(s
     t.status = "deleting"
     db.flush()
     run("analysisRuns", delete(AnalysisRun).where(AnalysisRun.tenant_id == tenant_id))
-    # Svar, præsentationshændelser, sessioner og genoptagelsesnøgler slettes via ON DELETE CASCADE
+    # Svar, præsentationshændelser, sessioner og kode-koblinger slettes via ON DELETE CASCADE
     run("responses", delete(Response).where(Response.tenant_id == tenant_id))
     run("accessCodes", delete(AccessCode).where(AccessCode.tenant_id == tenant_id))
     run("userScopes", delete(UserScope).where(UserScope.tenant_id == tenant_id))
@@ -408,6 +409,11 @@ def create_codes_pdf(body: CodesIn, p: Principal = Depends(admin),
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Afdelingerne skal høre til samme tenant.")
     if sv is None or sv.tenant_id != tenant_id or sv.status != "published":
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Spørgeskemaversionen er ikke publiceret.")
+    assigned = set(db.scalars(select(SurveyAssignment.unit_id).where(SurveyAssignment.survey_id == sv.survey_id)))
+    missing = sorted({u.name for u, _ in units if (u.parent_id or u.id) not in assigned})
+    if missing:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Spørgeskemaet er ikke tildelt institutionen for: " + ", ".join(missing) + ".")
     now = utcnow()
     vf = _naive_utc(body.validFrom) or now
     vt = _naive_utc(body.validTo) or (now + timedelta(days=60))

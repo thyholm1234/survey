@@ -99,6 +99,21 @@ class Survey(Base):
     created_at: Mapped[datetime] = mapped_column(DT, default=utcnow)
 
 
+class SurveyAssignment(Base):
+    """Spørgeskema tildelt en institution. Kun tildelte spørgeskemaer kan få udstedt adgangskoder."""
+
+    __tablename__ = "survey_assignments"
+    __table_args__ = (
+        UniqueConstraint("survey_id", "unit_id", name="uq_survey_assignment"),
+        {"schema": "qa_data"},
+    )
+    id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)
+    survey_id: Mapped[str] = mapped_column(ForeignKey("qa_data.surveys.id", ondelete="CASCADE"))
+    unit_id: Mapped[str] = mapped_column(ForeignKey("qa_data.organization_units.id", ondelete="CASCADE"), index=True)
+    assigned_by: Mapped[str] = mapped_column(ID)
+    assigned_at: Mapped[datetime] = mapped_column(DT, default=utcnow)
+
+
 class SurveyVersion(Base):
     __tablename__ = "survey_versions"
     __table_args__ = (

@@ -172,6 +172,6 @@ def respondent(request: Request, db: Session = Depends(get_db, scope="function")
         or sess.absolute_expires_at <= now
         or sess.last_seen_at + timedelta(seconds=s.respondent_session_ttl) <= now
     ):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sessionen er udløbet. Brug din genoptagelseskode.")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sessionen er udløbet. Log ind igen med din adgangskode.")
     sess.last_seen_at = now
     return sess

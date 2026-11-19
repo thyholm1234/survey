@@ -10,11 +10,11 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import get_settings
 from .db import ping
+from .static_assets import VersionedStaticFiles
 from .routers import admin_analyses, admin_auth, admin_dashboard, admin_exports, admin_org, admin_surveys, public, respondent, system
 
 log = logging.getLogger("app")
@@ -60,6 +60,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     s = get_settings()
+    asset_version: str | None = None  # sættes, når frontend monteres nedenfor
     app = FastAPI(
         title="Spørgeskema-API",
         version=s.app_version,
@@ -97,8 +98,13 @@ def create_app() -> FastAPI:
             h["Content-Security-Policy"] = API_CSP
             h["Vary"] = "Cookie, Sec-Fetch-Site"
         else:
-            # Statiske frontend-filer: html må aldrig caches, js/css skal revalideres
-            h["Cache-Control"] = "no-cache" if path.startswith(("/js/", "/css/", "/fonts/")) else "no-store"
+            # Statiske frontend-filer: html caches aldrig; js/css/fonts med aktuel ?v=<hash> er uforanderlige
+            # (ny deploy = nye URL'er), alt andet revalideres
+            if path.startswith(("/js/", "/css/", "/fonts/")):
+                versioned = asset_version is not None and request.query_params.get("v") == asset_version
+                h["Cache-Control"] = "public, max-age=31536000, immutable" if versioned else "no-cache"
+            else:
+                h["Cache-Control"] = "no-store"
             h["Content-Security-Policy"] = WEB_CSP
             h["Reporting-Endpoints"] = 'csp="/api/csp-report"'
         h["Strict-Transport-Security"] = f"max-age={s.hsts_max_age}; includeSubDomains"
@@ -141,7 +147,9 @@ def create_app() -> FastAPI:
     # Frontend (vanilla HTML/JS) serveres af appen selv; TLS håndteres af ekstern reverse proxy.
     # Monteres sidst, så /api/* altid rammer routerne. html=True giver /admin/ -> admin/index.html.
     if FRONTEND_DIR.is_dir():
-        app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+        static = VersionedStaticFiles(directory=FRONTEND_DIR, html=True)
+        asset_version = static.version
+        app.mount("/", static, name="frontend")
     return app
 
 

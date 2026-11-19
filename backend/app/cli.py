@@ -23,13 +23,14 @@ from .db import session_scope
 from .models import (
     AccessCode,
     Answer,
+    Domain,
     OrganizationUnit,
     PresentationEvent,
     Question,
     Response,
     Scenario,
     Subscale,
-    Domain,
+    SurveyAssignment,
     Tenant,
     User,
     UserScope,
@@ -111,6 +112,8 @@ def seed_demo() -> None:
         creds += [("demo.org", org_pw), ("demo.unit", unit_pw)]
         sv = survey_import.store_draft(db, tenant.id, org_user.id, doc)
         survey_import.publish(db, sv, org_user.id)
+        for u in units:
+            db.add(SurveyAssignment(survey_id=sv.survey_id, unit_id=u.id, assigned_by=org_user.id))
 
         codes = []
         now = utcnow()

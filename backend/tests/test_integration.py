@@ -37,7 +37,11 @@ def org(client):
         r = client.post(f"/api/admin/tenants/{t}/units", json={"name": name, "unitType": typ}, headers=H(csrf))
         assert r.status_code == 201, r.text
         units[typ] = r.json()["id"]
-    return {"tenant": t, "admin": adm, "csrf": csrf, "sv": sv, "units": units}
+    survey_id = next(x["id"] for x in client.get(f"/api/admin/surveys?tenantId={t}").json())
+    r = client.put(f"/api/admin/surveys/{survey_id}/assignments", json={"unitIds": list(units.values())},
+                   headers=H(csrf))
+    assert r.status_code == 200, r.text
+    return {"tenant": t, "admin": adm, "csrf": csrf, "sv": sv, "survey": survey_id, "units": units}
 
 
 def test_migrations_roundtrip(migrated):
@@ -540,3 +544,48 @@ def test_delete_subunit_keeps_responses_at_institution(client, org):
 
     with session_scope() as db:
         assert db.query(UserScope).filter_by(user_id=ca["id"]).count() == 0
+
+
+def test_survey_assignment_controls_code_issuing(client, org):
+    t, csrf, school, daycare = org["tenant"], org["csrf"], org["units"]["school"], org["units"]["daycare"]
+    url = f"/api/admin/surveys/{org['survey']}/assignments"
+    cls = client.post(f"/api/admin/tenants/{t}/units", json={"name": "5.B", "parentId": school},
+                      headers=H(csrf)).json()["id"]
+    # Fratag skolen: spørgeskemaet bliver i biblioteket, men der kan ikke udstedes koder til skolen/klassen
+    assert client.put(url, json={"unitIds": [daycare]}, headers=H(csrf)).json()["assignedUnitIds"] == [daycare]
+    surveys = client.get(f"/api/admin/surveys?tenantId={t}").json()
+    assert len(surveys) == 1 and surveys[0]["assignedUnitIds"] == [daycare]
+    r = issue_codes(client, csrf, org["sv"], {cls: 1}, expect=422)
+    assert "5.B" in r.json()["detail"]
+    issue_codes(client, csrf, org["sv"], {daycare: 1})
+    # Kun institutioner i samme tenant kan tildeles
+    assert client.put(url, json={"unitIds": [cls]}, headers=H(csrf)).status_code == 422
+    # Tildel igen: koder til klassen virker (arves fra institutionen)
+    assert client.put(url, json={"unitIds": [daycare, school]}, headers=H(csrf)).status_code == 200
+    issue_codes(client, csrf, org["sv"], {cls: 2})
+    # Afdelingsadmin kan ikke ændre tildelinger
+    ua = make_admin("unit.assign", [{"role_code": "unit_admin", "tenant_id": t, "unit_id": school}])
+    csrf2 = login(client, ua)
+    assert client.put(url, json={"unitIds": []}, headers=H(csrf2)).status_code == 404
+
+
+def test_frontend_assets_are_versioned_for_cache_busting(client):
+    """CDN'er kan overskrive Cache-Control; versionerede URL'er sikrer, at en deploy slår igennem."""
+    import re
+
+    html = client.get("/")
+    assert html.headers["cache-control"] == "no-store"
+    m = re.search(r'src="/js/respondent\.js\?v=([0-9a-f]{12})"', html.text)
+    assert m, html.text[:500]
+    v = m[1]
+    assert f'href="/css/app.css?v={v}"' in html.text
+    js = client.get(f"/js/respondent.js?v={v}")
+    assert js.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert f"from './api.js?v={v}'" in js.text and f"import './chrome.js?v={v}'" in js.text
+    assert "javascript" in js.headers["content-type"]
+    css = client.get(f"/css/app.css?v={v}")
+    assert f'url("/fonts/inter-latin.woff2?v={v}")' in css.text
+    # Uversioneret eller forældet version revalideres altid
+    assert client.get("/js/respondent.js").headers["cache-control"] == "no-cache"
+    assert client.get("/js/respondent.js?v=000000000000").headers["cache-control"] == "no-cache"
+    assert client.get("/admin/").text.count(f"?v={v}") >= 2
