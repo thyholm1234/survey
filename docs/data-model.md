@@ -34,7 +34,7 @@ erDiagram
   access_codes ||--o{ code_tickets : ""
   access_codes ||--o{ response_sessions : ""
   responses ||--o{ response_sessions : "cascade"
-  responses ||--o| resume_keys : "cascade"
+  responses ||--o| response_links : "cascade"
 
   responses {
     char32 id PK "pseudonymt responseId"
@@ -71,9 +71,6 @@ erDiagram
     string code_hash "Argon2id"
     datetime valid_from
     datetime valid_to
-    int max_starts
-    int max_completions
-    bool one_time
     string status
   }
 ```
@@ -81,6 +78,17 @@ erDiagram
 Øvrige tabeller: `qa_identity.rate_limits` (pseudonymiseret bucket, udløb), `qa_analysis.analysis_runs`
 (filtre, parametre, tilladte afdelinger, resultat, softwareversioner, datahash),
 `qa_audit.audit_events` (hash-kæde: `prev_hash`, `hash`).
+
+## Personlige adgangskoder
+
+Alle adgangskoder er personlige: højst én besvarelse ad gangen pr. kode. Koblingen kode → besvarelse
+findes kun i `qa_identity.response_links` (ikke i analysedata) og udløber med opbevaringsperioden.
+Deltageren logger ind igen med koden for at fortsætte en påbegyndt besvarelse eller for at trække en
+besvarelse tilbage (den slettes helt, auditeres som `respondent.withdrawn`) og derefter svare forfra.
+Koden virker også på siden om rettigheder (indsigt/sletning), også efter at koden er udløbet. Koderne
+udleveres som PDF (`POST /api/admin/access-codes/personal-pdf`): én forside til den ansvarlige pr.
+afdeling og én side pr. kode med vejledning og QR-kode (`/#kode=…`; fragmentet sendes ikke til serveren).
+Klartekst gemmes ikke.
 
 ## Missing-koder i analysedata
 | Kode | Betydning |

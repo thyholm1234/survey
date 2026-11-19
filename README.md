@@ -104,7 +104,7 @@ python3 scripts/smoke_test.py --code <KODE> --admin <bruger> --password <pw> --n
 - `tests/test_stats.py` – mod scipy/statsmodels og kendte værdier (alfa, omega, Welch, Games-Howell,
   Hedges g, ICC, rwg(j), mixed model, sekundær celleundertrykkelse).
 - `tests/test_schema.py` – JSON-schema contract tests.
-- `tests/test_integration.py` – migrations-roundtrip, MVP-flow, genoptagelse, tenant-isolation,
+- `tests/test_integration.py` – migrations-roundtrip, MVP-flow, login igen/tilbagetrækning, tenant-isolation,
   autorisation, CSRF/MFA, rate limiting, celleundertrykkelse, reproducerbar eksport, auditkæde.
 
 Integrationstests kører i separate `test_qa_*`-databaser og rører aldrig produktionsdata.

@@ -438,3 +438,4 @@ pre.json { background: var(--bg-subtle); border: 1px solid var(--border); border
 
 .standalone-link { display: inline-block; padding-block: 0.5rem; }
 .legal .table-wrapper { max-block-size: none; overflow-y: visible; }
+.count-input { max-width: 7rem; }

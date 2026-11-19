@@ -28,7 +28,6 @@ class Settings(BaseSettings):
     min_cell_size: int = Field(10, ge=3)
     respondent_session_ttl: int = 3600
     respondent_session_max: int = 43200
-    resume_key_ttl_days: int = 14
     admin_session_ttl: int = 1800
     admin_session_max: int = 28800
     rl_code_attempts: int = 5

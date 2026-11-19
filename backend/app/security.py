@@ -20,7 +20,6 @@ _ph = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=1, hash_len=32,
 # Uden tvetydige tegn: ingen 0/O, 1/I/L
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 12  # ≈ 59 bit entropi
-RESUME_LENGTH = 16  # ≈ 79 bit
 
 _DUMMY_HASH = _ph.hash(secrets.token_urlsafe(16))
 

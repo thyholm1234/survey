@@ -25,9 +25,9 @@ from ..models import (
     PresentationEvent,
     Question,
     Response as ResponseRow,
+    ResponseLink,
     ResponseScale,
     ResponseSession,
-    ResumeKey,
     Scenario,
     Subscale,
     SurveyVersion,
@@ -35,11 +35,8 @@ from ..models import (
     utcnow,
 )
 from ..security import (
-    RESUME_LENGTH,
-    argon2_hash,
     argon2_verify,
     code_lookup,
-    generate_code,
     new_token,
     normalize_code,
     token_digest,
@@ -72,10 +69,6 @@ class StartIn(Strict):
     client: ClientMeta = Field(default_factory=ClientMeta)
 
 
-class ResumeIn(Strict):
-    resumeKey: str = Field(min_length=10, max_length=40)
-
-
 class ShownIn(Strict):
     positions: list[int] = Field(min_length=1, max_length=3)
 
@@ -93,10 +86,6 @@ class AnswerIn(Strict):
 def _code_valid(code: AccessCode | None, db: Session) -> tuple[SurveyVersion, Tenant] | None:
     now = utcnow()
     if code is None or code.status != "active" or not (code.valid_from <= now < code.valid_to):
-        return None
-    if code.max_starts is not None and code.starts_count >= code.max_starts:
-        return None
-    if code.max_completions is not None and code.completions_count >= code.max_completions:
         return None
     sv = db.get(SurveyVersion, code.survey_version_id)
     tenant = db.get(Tenant, code.tenant_id)
@@ -132,6 +121,27 @@ def _intro(sv: SurveyVersion, tenant: Tenant, db: Session) -> dict:
     }
 
 
+def _code_response(db: Session, code_id: str) -> ResponseRow | None:
+    """Kodens besvarelse (koblingen findes kun i qa_identity). Højst én ad gangen pr. kode."""
+    return db.scalar(
+        select(ResponseRow).join(ResponseLink, ResponseLink.response_id == ResponseRow.id)
+        .where(ResponseLink.access_code_id == code_id).order_by(ResponseRow.started_at.desc()).limit(1)
+    )
+
+
+def _delete_response(db: Session, resp: ResponseRow, action: str) -> None:
+    """Sletter en besvarelse og alt knyttet til den; fuldførte tælles ned på koden."""
+    rid, tenant_id = resp.id, resp.tenant_id
+    if resp.status == "completed":
+        code_id = db.scalar(select(ResponseLink.access_code_id).where(ResponseLink.response_id == rid))
+        if code_id:
+            db.execute(update(AccessCode).where(AccessCode.id == code_id, AccessCode.completions_count > 0)
+                       .values(completions_count=AccessCode.completions_count - 1))
+    db.delete(resp)  # svar, hændelser, sessioner og kobling til koden slettes via ON DELETE CASCADE
+    db.flush()
+    audit.record(action, actor_type="respondent", tenant_id=tenant_id, target_type="response", target_id=rid)
+
+
 @router.post("/access-code/verify")
 def verify_code(body: CodeIn, request: Request, db: Session = Depends(get_db, scope="function")):
     s = get_settings()
@@ -149,7 +159,49 @@ def verify_code(body: CodeIn, request: Request, db: Session = Depends(get_db, sc
     ticket = new_token()
     db.add(CodeTicket(id=token_digest(ticket), access_code_id=code.id,
                       expires_at=utcnow() + timedelta(seconds=TICKET_TTL)))
-    return {"ticket": ticket, "expiresIn": TICKET_TTL, **_intro(sv, tenant, db)}
+    existing = _code_response(db, code.id)
+    return {"ticket": ticket, "expiresIn": TICKET_TTL,
+            "existing": {"status": existing.status} if existing else None, **_intro(sv, tenant, db)}
+
+
+class TicketIn(Strict):
+    ticket: str = Field(min_length=20, max_length=100)
+
+
+def _ticket_code(body: TicketIn, db: Session) -> tuple[CodeTicket, AccessCode]:
+    ticket = db.get(CodeTicket, token_digest(body.ticket), with_for_update=True)
+    if ticket is None or ticket.used or ticket.expires_at <= utcnow():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Adgangen er udløbet. Indtast koden igen.")
+    code = db.get(AccessCode, ticket.access_code_id, with_for_update=True)
+    if code is None or not _code_valid(code, db):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, GENERIC_CODE_ERROR)
+    return ticket, code
+
+
+@router.post("/continue")
+def continue_response(body: TicketIn, response: Response, db: Session = Depends(get_db, scope="function")):
+    """Fortsæt en påbegyndt besvarelse efter login med adgangskoden."""
+    ticket, code = _ticket_code(body, db)
+    resp = _code_response(db, code.id)
+    if resp is None or resp.status != "in_progress":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Der er ingen påbegyndt besvarelse at fortsætte.")
+    ticket.used = True
+    db.execute(update(ResponseSession).where(ResponseSession.response_id == resp.id).values(revoked=True))
+    _new_session(db, response, resp.id, code.id)
+    db.add(PresentationEvent(response_id=resp.id, event_type="resume"))
+    return {"responseId": resp.id}
+
+
+@router.post("/withdraw")
+def withdraw_response(body: TicketIn, response: Response, db: Session = Depends(get_db, scope="function")):
+    """Træk besvarelsen tilbage (sletter den helt). Billetten bevares, så en ny kan startes."""
+    _ticket, code = _ticket_code(body, db)
+    resp = _code_response(db, code.id)
+    if resp is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Der er ingen besvarelse at trække tilbage.")
+    _delete_response(db, resp, "respondent.withdrawn")
+    clear_cookie(response, RESP_COOKIE)
+    return {"withdrawn": True}
 
 
 def _validate_background(doc: dict, given: dict[str, str | None]) -> dict[str, str | None]:
@@ -183,20 +235,16 @@ def start_session(body: StartIn, request: Request, response: Response, db: Sessi
     if ticket is None or ticket.used or ticket.expires_at <= utcnow():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Adgangen er udløbet. Indtast koden igen.")
     ticket.used = True
-    code = db.get(AccessCode, ticket.access_code_id)
+    code = db.get(AccessCode, ticket.access_code_id, with_for_update=True)
     valid = _code_valid(code, db)
     if not valid:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, GENERIC_CODE_ERROR)
-    sv, _tenant = valid
-    # Atomisk optælling (beskytter max_starts mod race conditions)
-    res = db.execute(
-        update(AccessCode)
-        .where(AccessCode.id == code.id)
-        .where((AccessCode.max_starts.is_(None)) | (AccessCode.starts_count < AccessCode.max_starts))
-        .values(starts_count=AccessCode.starts_count + 1)
-    )
-    if res.rowcount != 1:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, GENERIC_CODE_ERROR)
+    if _code_response(db, code.id) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Der findes allerede en besvarelse for denne kode. Log ind igen med koden.")
+    sv, tenant = valid
+    # Koden er låst (FOR UPDATE), så to samtidige starter ikke kan give to besvarelser
+    code.starts_count += 1
 
     doc = json.loads(sv.source_json)
     background = _validate_background(doc, body.background)
@@ -235,32 +283,11 @@ def start_session(body: StartIn, request: Request, response: Response, db: Sessi
     db.flush()
     db.add(PresentationEvent(response_id=resp.id, event_type="start"))
 
-    resume_key = generate_code(RESUME_LENGTH)
-    norm = normalize_code(resume_key)
-    db.add(ResumeKey(
-        response_id=resp.id, access_code_id=code.id, lookup_hmac=code_lookup(norm, "resume"),
-        key_hash=argon2_hash(norm), expires_at=now + timedelta(days=s.resume_key_ttl_days),
-    ))
+    # Koblingen bevares hele opbevaringsperioden, så deltageren kan logge ind igen og udøve sine
+    # rettigheder (indsigt, portabilitet, sletning, art. 15/17/20) uden at give os en identitet.
+    months = tenant.retention_months or s.default_retention_months
+    db.add(ResponseLink(response_id=resp.id, access_code_id=code.id, expires_at=now + timedelta(days=30 * months)))
     _new_session(db, response, resp.id, code.id)
-    return {"responseId": resp.id, "resumeKey": resume_key}
-
-
-@router.post("/resume")
-def resume(body: ResumeIn, request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
-    s = get_settings()
-    bucket = ratelimit.bucket_for(request, "resume")
-    ratelimit.check_blocked(bucket, s.rl_code_attempts)
-    norm = normalize_code(body.resumeKey)
-    rk = db.scalar(select(ResumeKey).where(ResumeKey.lookup_hmac == code_lookup(norm, "resume")))
-    ok = argon2_verify(rk.key_hash if rk else None, norm)
-    resp = db.get(ResponseRow, rk.response_id) if ok and rk else None
-    if not ok or rk is None or rk.expires_at <= utcnow() or resp is None or resp.status != "in_progress":
-        ratelimit.hit(bucket, s.rl_code_attempts, s.rl_code_window)
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Genoptagelseskoden er ugyldig eller udløbet.")
-    # Tilbagekald tidligere sessioner for denne besvarelse
-    db.execute(update(ResponseSession).where(ResponseSession.response_id == resp.id).values(revoked=True))
-    _new_session(db, response, resp.id, rk.access_code_id)
-    db.add(PresentationEvent(response_id=resp.id, event_type="resume"))
     return {"responseId": resp.id}
 
 
@@ -426,14 +453,6 @@ def complete(response_id: str, response: Response, sess: ResponseSession = Depen
     db.execute(update(AccessCode).where(AccessCode.id == sess.access_code_id)
                .values(completions_count=AccessCode.completions_count + 1))
     db.execute(update(ResponseSession).where(ResponseSession.response_id == resp.id).values(revoked=True))
-    # Den personlige kode BEVARES efter afslutning, så respondenten kan udøve sine rettigheder (indsigt,
-    # portabilitet, sletning, art. 15/17/20) uden at give os en identitet. Den udløber sammen med
-    # opbevaringsperioden og kan ikke bruges til at genoptage en afsluttet besvarelse.
-    rk = db.scalar(select(ResumeKey).where(ResumeKey.response_id == resp.id))
-    if rk:
-        tenant = db.get(Tenant, resp.tenant_id)
-        months = tenant.retention_months if tenant and tenant.retention_months else get_settings().default_retention_months
-        rk.expires_at = resp.started_at + timedelta(days=30 * months)
     clear_cookie(response, RESP_COOKIE)
     return {"status": "completed"}
 
@@ -453,13 +472,14 @@ def _rights_lookup(body: KeyIn, request: Request, db: Session) -> ResponseRow:
     bucket = ratelimit.bucket_for(request, "rights")
     ratelimit.check_blocked(bucket, s.rl_code_attempts)
     norm = normalize_code(body.key)
-    rk = db.scalar(select(ResumeKey).where(ResumeKey.lookup_hmac == code_lookup(norm, "resume")))
-    ok = argon2_verify(rk.key_hash if rk else None, norm)
-    resp = db.get(ResponseRow, rk.response_id) if ok and rk else None
-    if not ok or rk is None or resp is None or rk.expires_at <= utcnow():
-        ratelimit.hit(bucket, s.rl_code_attempts, s.rl_code_window)
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Koden er ugyldig eller udløbet.")
-    return resp
+    # Virker uanset om koden er udløbet/deaktiveret, så rettighederne kan udøves hele opbevaringsperioden
+    code = db.scalar(select(AccessCode).where(AccessCode.lookup_hmac == code_lookup(norm)))
+    ok = argon2_verify(code.code_hash if code else None, norm)
+    resp = _code_response(db, code.id) if ok and code else None
+    if resp is not None:
+        return resp
+    ratelimit.hit(bucket, s.rl_code_attempts, s.rl_code_window)
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Koden er ugyldig eller udløbet.")
 
 
 @router.post("/rights/export")
@@ -494,10 +514,6 @@ def rights_export(body: KeyIn, request: Request, db: Session = Depends(get_db, s
 def rights_erase(body: KeyIn, request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
     """Sletning (art. 17) / tilbagekaldelse af samtykke: sletter besvarelsen og alt knyttet til den."""
     resp = _rights_lookup(body, request, db)
-    rid, tenant_id = resp.id, resp.tenant_id
-    db.delete(resp)  # svar, hændelser, sessioner og personlig kode slettes via ON DELETE CASCADE
-    db.flush()
-    audit.record("respondent.erased", actor_type="respondent", tenant_id=tenant_id,
-                 target_type="response", target_id=rid)
+    _delete_response(db, resp, "respondent.erased")
     clear_cookie(response, RESP_COOKIE)
     return {"erased": True}

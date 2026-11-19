@@ -3,7 +3,7 @@
 | Datatype | Placering | Periode | Mekanisme | Status |
 |---|---|---|---|---|
 | Rå besvarelser, svar, hændelser | `qa_data` | Pr. tenant (`retentionMonths`, standard 24) fra start | Automatisk, hver time (`services/retention.py`); respondent kan slette før (art. 17) | ✅ |
-| Personlig kode (genoptagelse/rettigheder) | `qa_identity.resume_keys` | Til opbevaringsperiodens udløb; genoptagelse af uafsluttet i `RESUME_KEY_TTL_DAYS` (standard 14) | Automatisk | ✅ |
+| Kobling personlig kode → besvarelse (login igen/rettigheder) | `qa_identity.response_links` | Til opbevaringsperiodens udløb | Automatisk | ✅ |
 | Respondent-/adminsessioner, kodebilletter | `qa_identity` | Minutter til timer (inaktivitet/absolut maks.) | Automatisk | ✅ |
 | Rate-limit-poster (IP som dagligt roterende HMAC) | `qa_identity.rate_limits` | Udløber efter 15 min; slettes ved næste timevise oprydning | Automatisk | ✅ |
 | Analyseresultater | `qa_analysis` | Slettes med tenant | Manuelt/tenant-sletning | 🟡 ingen automatisk frist |

@@ -71,7 +71,7 @@ def respondent_flow(code: str) -> None:
     _, start = c.req("POST", "/api/respondent/sessions", {
         "ticket": intro["ticket"], "consent": True, "background": {"profession": "laerer"},
         "client": {"browserClass": "firefox", "screenClass": "l"}}, expect=(201,))
-    rid, resume_key = start["responseId"], start["resumeKey"]
+    rid = start["responseId"]
     _, st = c.req("GET", f"/api/respondent/sessions/{rid}/next")
     order = st["order"]
     assert len(order) == 120 and order[-1]["perspective"] == "expect"
@@ -86,9 +86,11 @@ def respondent_flow(code: str) -> None:
     q0 = order[0]["questionId"]
     _, a = c.req("PUT", f"/api/respondent/sessions/{rid}/answers/{q0}", {"value": 6, "seq": 1})
     assert a["value"] == 1, a
-    # genoptag i en "ny browser"
+    # log ind igen med samme kode i en "ny browser"
     c2 = Client(BASE)
-    c2.req("POST", "/api/respondent/resume", {"resumeKey": resume_key})
+    _, again = c2.req("POST", "/api/respondent/access-code/verify", {"code": code})
+    assert again["existing"] == {"status": "in_progress"}, again["existing"]
+    c2.req("POST", "/api/respondent/continue", {"ticket": again["ticket"]})
     _, st2 = c2.req("GET", f"/api/respondent/sessions/{rid}/next")
     assert [o["questionId"] for o in st2["order"]] == first_order, "rækkefølge ændret ved genoptagelse"
     assert st2["resumePosition"] == 10, st2["resumePosition"]
@@ -96,7 +98,7 @@ def respondent_flow(code: str) -> None:
     c.req("GET", f"/api/respondent/sessions/{rid}/next", expect=(401,))
     c2.req("POST", f"/api/respondent/sessions/{rid}/complete")
     c2.req("PUT", f"/api/respondent/sessions/{rid}/answers/{q0}", {"value": 2, "seq": 5}, expect=(401,))
-    print("OK respondent: kode, start, svar, idempotens, genoptagelse med samme rækkefølge, afslutning")
+    print("OK respondent: kode, start, svar, idempotens, login igen med samme rækkefølge, afslutning")
 
 
 def security_checks() -> None:

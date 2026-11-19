@@ -11,7 +11,7 @@ const reminder = document.getElementById('reminder');
 const reminderText = document.getElementById('reminder-text');
 
 const st = {
-  personalKey: null, intro: null, ticket: null, responseId: null, data: null,
+  loginCode: null, intro: null, ticket: null, responseId: null, data: null,
   pages: [], pageIdx: 0, maxPageIdx: 0, seq: new Map(), saving: 0,
 };
 
@@ -38,13 +38,14 @@ function browserClass() {
 function screenClass() { const w = window.innerWidth; return w < 600 ? 's' : w < 1100 ? 'm' : 'l'; }
 
 // ---------------------------------------------------------------- Kode
-function codeView(message) {
+function codeView(message, prefill) {
   const err = errorBox('code-error');
   const input = h('input', {
     id: 'code', name: 'code', type: 'text', class: 'code', required: true, minlength: 6, maxlength: 40,
     autocomplete: 'one-time-code', autocapitalize: 'characters', autocorrect: 'off', spellcheck: 'false',
     enterkeyhint: 'go', 'aria-describedby': 'code-hint code-error',
   });
+  if (prefill) input.value = prefill;
   input.addEventListener('input', () => { input.setCustomValidity(''); input.removeAttribute('aria-invalid'); err.textContent = ''; });
   const btn = h('button', { type: 'submit', class: 'cta-full' }, t('codeSubmit'), icon('arrow-right'));
   const form = h('form', { method: 'post', action: '/', novalidate: true, 'aria-labelledby': 'code-h' },
@@ -60,16 +61,13 @@ function codeView(message) {
     }
     btn.disabled = true;
     try {
-      const res = await api('POST', '/api/respondent/access-code/verify', { code: input.value });
-      st.intro = res; st.ticket = res.ticket;
-      infoView();
+      await verifyCode(input.value);
     } catch (ex) {
       input.setAttribute('aria-invalid', 'true');
       err.textContent = ex instanceof ApiError && ex.message ? ex.message : t('genericError');
       input.focus();
     } finally { btn.disabled = false; }
   });
-  const resumeBtn = h('button', { type: 'button', class: 'link', text: t('resumeLink'), onclick: () => resumeView() });
   const rightsBtn = h('button', { type: 'button', class: 'link', text: t('rightsLink'), onclick: () => rightsView() });
   show(h('section', { class: 'hero', 'aria-labelledby': 'code-h' },
     h('div', { class: 'hero-inner' },
@@ -77,36 +75,76 @@ function codeView(message) {
       h('h1', { id: 'code-h', text: t('heroTitle') }),
       h('p', { class: 'lead', text: t('heroLead') }),
       h('div', { class: 'card' }, form),
-      h('p', {}, resumeBtn, ' ', rightsBtn))),
+      h('p', {}, rightsBtn))),
   faqSection());
+}
+
+async function verifyCode(code) {
+  const res = await api('POST', '/api/respondent/access-code/verify', { code });
+  st.intro = res; st.ticket = res.ticket;
+  st.loginCode = code;
+  if (res.existing) return personalView(res.existing.status);
+  infoView();
+}
+
+// ---------------------------------------------------------------- Personlig kode: fortsæt / træk tilbage / svar igen
+function personalView(status) {
+  const err = errorBox('personal-error');
+  const done = status === 'completed';
+  const withdraw = h('button', { type: 'button', class: done ? 'danger' : 'secondary' }, icon('trash-2', 'icon-sm'), t('withdraw'));
+  withdraw.addEventListener('click', async () => {
+    if (!(await confirmDialog(t('withdrawConfirmTitle'), t('withdrawConfirmText'), t('withdrawConfirm')))) return;
+    try {
+      await api('POST', '/api/respondent/withdraw', { ticket: st.ticket });
+      withdrawnView();
+    } catch (ex) { err.textContent = ex.message || t('genericError'); if (ex.status === 400) setTimeout(() => codeView(ex.message, st.loginCode), 1500); }
+  });
+  const actions = [withdraw];
+  if (done) {
+    actions.unshift(h('button', { type: 'button', class: 'secondary', onclick: () => downloadMyData(st.loginCode, err) }, icon('download', 'icon-sm'), t('download')));
+  } else {
+    const cont = h('button', { type: 'button' }, t('continueResponse'), icon('arrow-right'));
+    cont.addEventListener('click', async () => {
+      cont.disabled = true;
+      try {
+        const r = await api('POST', '/api/respondent/continue', { ticket: st.ticket });
+        st.ticket = null;
+        await loadSurvey(r.responseId);
+      } catch (ex) { err.textContent = ex.message || t('genericError'); cont.disabled = false; }
+    });
+    actions.push(cont);
+  }
+  show(h('section', { class: 'card center-card' },
+    h('div', { class: 'done-mark' }, icon(done ? 'circle-check' : 'clipboard-list')),
+    h('h1', { text: done ? t('personalDoneHeading') : t('personalOpenHeading') }),
+    h('p', { text: done ? t('personalDoneText') : t('personalOpenText') }),
+    err, h('div', { class: 'actions' }, actions),
+    h('p', {}, h('button', { type: 'button', class: 'link', text: t('logout'), onclick: () => { st.ticket = null; st.loginCode = null; codeView(); } }))));
+}
+
+function withdrawnView() {
+  reminder.hidden = true;
+  st.data = null;
+  const again = h('button', { type: 'button' }, t('answerAgain'), icon('arrow-right'));
+  const err = errorBox('again-error');
+  again.addEventListener('click', async () => {
+    again.disabled = true;
+    try {
+      // Billetten fra login er stadig gyldig (et par minutter); ellers verificeres koden igen
+      if (st.ticket && st.intro) infoView(); else await verifyCode(st.loginCode);
+    } catch (ex) { err.textContent = ex.message || t('genericError'); again.disabled = false; }
+  });
+  show(h('section', { class: 'card center-card' }, h('div', { class: 'done-mark' }, icon('circle-check')),
+    h('h1', { text: t('withdrawnHeading') }), h('p', { text: t('withdrawnText') }), err,
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'secondary', onclick: () => { st.ticket = null; st.loginCode = null; codeView(); } }, t('logout')),
+      st.loginCode ? again : null)));
 }
 
 function faqSection() {
   return h('section', { class: 'faq', 'aria-labelledby': 'faq-h' },
     h('h2', { id: 'faq-h', text: t('faqHeading') }),
     t('faq').map(([q, a]) => h('details', {}, h('summary', {}, q, icon('chevron-down')), h('p', { text: a }))));
-}
-
-function resumeView() {
-  const err = errorBox('resume-error');
-  const input = h('input', { id: 'resume', name: 'resume', type: 'text', class: 'code', required: true, maxlength: 40,
-    autocomplete: 'off', autocapitalize: 'characters', autocorrect: 'off', spellcheck: 'false', 'aria-describedby': 'resume-error' });
-  const btn = h('button', { type: 'submit' }, t('resumeSubmit'), icon('arrow-right'));
-  const form = h('form', { method: 'post', action: '/', novalidate: true },
-    h('div', { class: 'field' }, h('label', { for: 'resume', text: t('resumeLabel') }), input), err,
-    h('div', { class: 'actions' }, h('button', { type: 'button', class: 'secondary', onclick: () => codeView() }, icon('arrow-left', 'icon-sm'), t('prev')), btn));
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    btn.disabled = true;
-    try {
-      const r = await api('POST', '/api/respondent/resume', { resumeKey: input.value });
-      await loadSurvey(r.responseId);
-    } catch (ex) {
-      input.setAttribute('aria-invalid', 'true');
-      err.textContent = ex.message || t('genericError'); input.focus();
-    } finally { btn.disabled = false; }
-  });
-  show(h('section', { class: 'card' }, h('h1', { text: t('resumeLabel') }), form));
 }
 
 // ---------------------------------------------------------------- Information og samtykke
@@ -145,7 +183,7 @@ function infoView() {
         client: { browserClass: browserClass(), screenClass: screenClass() },
       });
       st.ticket = null;
-      resumeKeyView(r.responseId, r.resumeKey);
+      await loadSurvey(r.responseId);
     } catch (ex) {
       err.textContent = ex.message || t('genericError');
       if (ex.status === 400) setTimeout(() => codeView(ex.message), 1500);
@@ -157,23 +195,6 @@ function infoView() {
     h('h2', { text: t('infoHeading') }), dl,
     h('p', { class: 'hint' }, t('readMore'), ' ', legalLink('/privatliv/', t('privacy')), ', ', legalLink('/databehandling/', t('processing')),
       ' og ', legalLink('/cookies/', t('cookies')), '.')), form);
-}
-
-function resumeKeyView(responseId, key) {
-  const copyBtn = h('button', { type: 'button', class: 'secondary' }, icon('copy', 'icon-sm'), t('copy'));
-  copyBtn.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(key);
-      copyBtn.replaceChildren(icon('check', 'icon-sm'), t('copied')); announce(t('copied'));
-    } catch { /* manuelt */ }
-  });
-  show(h('section', { class: 'card center-card' },
-    h('div', { class: 'done-mark' }, icon('key-round')),
-    h('h1', { text: t('resumeKeyHeading') }),
-    h('p', { text: t('resumeKeyText') }),
-    h('p', {}, h('output', { class: 'resume-key', text: key })),
-    h('div', { class: 'actions' }, copyBtn,
-      h('button', { type: 'button', onclick: () => { st.personalKey = key; loadSurvey(responseId); } }, t('continue'), icon('arrow-right')))));
 }
 
 // ---------------------------------------------------------------- Besvarelse
@@ -204,7 +225,7 @@ async function loadSurvey(responseId) {
   try {
     st.data = await api('GET', `/api/respondent/sessions/${encodeURIComponent(responseId)}/next`);
   } catch (ex) {
-    if (ex.status === 401) return codeView(t('sessionExpired'));
+    if (ex.status === 401) return codeView(t('sessionExpired'), st.loginCode);
     return codeView(t('genericError'));
   }
   st.responseId = responseId;
@@ -237,7 +258,7 @@ async function markShown(items) {
   try {
     await api('POST', `/api/respondent/sessions/${st.responseId}/shown`, { positions });
     items.forEach((o) => { o.shown = true; });
-  } catch (ex) { if (ex.status === 401) codeView(t('sessionExpired')); }
+  } catch (ex) { if (ex.status === 401) codeView(t('sessionExpired'), st.loginCode); }
 }
 
 const queue = new Map();
@@ -254,7 +275,7 @@ async function flush() {
         announce(t('saved'));
         setSaveStatus(t('saved'));
       } catch (ex) {
-        if (ex.status === 401) { queue.clear(); codeView(t('sessionExpired')); return; }
+        if (ex.status === 401) { queue.clear(); codeView(t('sessionExpired'), st.loginCode); return; }
         if (ex.status && ex.status < 500 && ex.status !== 429) { queue.delete(qid); continue; }
         setSaveStatus(t('saveFailed'));
         await new Promise((r) => setTimeout(r, 2500));
@@ -353,7 +374,7 @@ function reviewView() {
       doneView();
     } catch (ex) {
       btn.disabled = false;
-      if (ex.status === 401) return codeView(t('sessionExpired'));
+      if (ex.status === 401) return codeView(t('sessionExpired'), st.loginCode);
       announce(t('genericError'));
     }
   });
@@ -371,13 +392,13 @@ function reviewView() {
 function doneView() {
   reminder.hidden = true;
   st.data = null;
-  const key = st.personalKey;
+  const key = st.loginCode;
   show(h('section', { class: 'card center-card' }, h('div', { class: 'done-mark' }, icon('circle-check')),
-    h('h1', { text: t('doneHeading') }), h('p', { text: t('doneText') }), h('p', { text: t('doneRights') }),
+    h('h1', { text: t('doneHeading') }), h('p', { text: t('doneText') }), h('p', { text: t('donePersonal') }),
     h('div', { class: 'actions' },
       key ? [
         h('button', { type: 'button', class: 'secondary', onclick: () => downloadMyData(key) }, icon('download', 'icon-sm'), t('download')),
-        h('button', { type: 'button', class: 'secondary', onclick: () => eraseMyData(key) }, icon('trash-2', 'icon-sm'), t('erase')),
+        h('button', { type: 'button', class: 'secondary', onclick: () => eraseMyData(key, null, true) }, icon('trash-2', 'icon-sm'), t('withdraw')),
       ] : h('button', { type: 'button', class: 'secondary', onclick: () => rightsView() }, t('rightsLink')))));
 }
 
@@ -411,11 +432,15 @@ async function downloadMyData(key, errEl) {
   }
 }
 
-async function eraseMyData(key, errEl) {
-  if (!(await confirmDialog(t('eraseConfirmTitle'), t('eraseConfirmText'), t('eraseConfirm')))) return;
+async function eraseMyData(key, errEl, asWithdraw = false) {
+  const ok = asWithdraw
+    ? await confirmDialog(t('withdrawConfirmTitle'), t('withdrawConfirmText'), t('withdrawConfirm'))
+    : await confirmDialog(t('eraseConfirmTitle'), t('eraseConfirmText'), t('eraseConfirm'));
+  if (!ok) return;
   try {
     await api('POST', '/api/respondent/rights/erase', { key });
-    st.personalKey = null; st.data = null; reminder.hidden = true;
+    if (asWithdraw) { st.ticket = null; return withdrawnView(); }
+    st.loginCode = null; st.data = null; reminder.hidden = true;
     show(h('section', { class: 'card center-card' }, h('div', { class: 'done-mark' }, icon('circle-check')),
       h('h1', { text: t('erasedHeading') }), h('p', { text: t('erasedText') })));
   } catch (ex) {
@@ -444,6 +469,13 @@ function rightsView() {
 // ---------------------------------------------------------------- Opstart
 (async () => {
   if (location.hash === '#rettigheder') return rightsView();
+  const m = /^#kode=([A-Za-z0-9-]{6,40})$/.exec(location.hash);
+  if (m) {
+    // Koden fra QR-koden udfyldes, men sendes først når deltageren trykker »Fortsæt«; fjernes fra adresselinjen
+    history.replaceState(null, '', location.pathname);
+    const raw = m[1].toUpperCase().replace(/-/g, '');
+    return codeView(null, raw.match(/.{1,4}/g).join('-'));
+  }
   try {
     const s = await api('GET', '/api/respondent/session');
     await loadSurvey(s.responseId);

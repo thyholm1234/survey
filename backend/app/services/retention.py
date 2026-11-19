@@ -49,8 +49,8 @@ def run_retention() -> dict:
             out["tickets"] = conn.execute(text(
                 f"DELETE FROM {qualified('qa_identity', 'code_tickets')} WHERE expires_at < :n OR used = 1"),
                 {"n": now - timedelta(minutes=1)}).rowcount
-            out["resumeKeys"] = conn.execute(text(
-                f"DELETE FROM {qualified('qa_identity', 'resume_keys')} WHERE expires_at < :n"), {"n": now}).rowcount
+            out["responseLinks"] = conn.execute(text(
+                f"DELETE FROM {qualified('qa_identity', 'response_links')} WHERE expires_at < :n"), {"n": now}).rowcount
         finally:
             conn.execute(text("SELECT RELEASE_LOCK(:n)"), {"n": lock})
     out["rateLimits"] = ratelimit.purge_expired()

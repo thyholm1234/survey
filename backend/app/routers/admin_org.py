@@ -1,18 +1,21 @@
 """Tenants, afdelinger, brugere og adgangskoder."""
 from __future__ import annotations
 
-import re
+import json
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response as RawResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import audit
+from ..config import get_settings
 from ..db import get_db
 from ..deps import ROLE_ORG, ROLE_SYSTEM, ROLE_UNIT, Principal, admin, system_admin
 from ..models import (
@@ -33,6 +36,7 @@ from ..models import (
     utcnow,
 )
 from ..security import argon2_hash, code_lookup, generate_code, normalize_code
+from ..services import code_sheets
 
 router = APIRouter(prefix="/api/admin", tags=["admin-org"])
 
@@ -347,25 +351,10 @@ def disable_user(user_id: str, body: EmptyIn, p: Principal = Depends(admin), db:
 # ---------------------------------------------------------------------------
 
 
-class CodeIn(Strict):
-    unitId: str = Field(max_length=32)
-    surveyVersionId: str = Field(max_length=32)
-    label: str | None = Field(None, max_length=200)
-    validFrom: datetime | None = None
-    validTo: datetime | None = None
-    maxStarts: int | None = Field(None, ge=1, le=100000)
-    maxCompletions: int | None = Field(None, ge=1, le=100000)
-    groupTags: list[str] = Field(default_factory=list, max_length=10)
-    count: int = Field(1, ge=1, le=500)
-    oneTime: bool = False
-
-
 def _code_out(c: AccessCode) -> dict:
     return {"id": c.id, "unitId": c.unit_id, "surveyVersionId": c.survey_version_id, "label": c.label,
             "validFrom": c.valid_from.isoformat() + "Z", "validTo": c.valid_to.isoformat() + "Z",
-            "maxStarts": c.max_starts, "maxCompletions": c.max_completions, "starts": c.starts_count,
-            "completions": c.completions_count, "status": c.status, "groupTags": c.group_tags,
-            "oneTime": c.one_time}
+            "starts": c.starts_count, "completions": c.completions_count, "status": c.status}
 
 
 def _naive_utc(d: datetime | None) -> datetime | None:
@@ -378,43 +367,80 @@ def _naive_utc(d: datetime | None) -> datetime | None:
     return d
 
 
-@router.post("/access-codes", status_code=201)
-def create_codes(body: CodeIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
-    unit = db.get(OrganizationUnit, body.unitId)
-    if unit is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ikke fundet.")
-    p.require_unit(db, unit.tenant_id, unit.id)
+class CodeUnitIn(Strict):
+    unitId: str = Field(max_length=32)
+    count: int = Field(ge=1, le=500)
+
+
+class CodesIn(Strict):
+    surveyVersionId: str = Field(max_length=32)
+    units: list[CodeUnitIn] = Field(min_length=1, max_length=200)
+    validFrom: datetime | None = None
+    validTo: datetime | None = None
+    label: str | None = Field(None, max_length=100)
+
+
+MAX_CODES = 1000  # ≈ 1 min Argon2-hashing
+
+
+@router.post("/access-codes")
+def create_codes_pdf(body: CodesIn, p: Principal = Depends(admin),
+                              db: Session = Depends(get_db, scope="function")):
+    """Udsteder personlige koder (én besvarelse ad gangen pr. kode; deltageren kan logge ind igen) for en
+    eller flere afdelinger og returnerer dem som PDF: forside til den ansvarlige + én side med vejledning pr. kode.
+    Klartekstkoderne findes kun i PDF'en; kun Argon2id-hash gemmes."""
+    if len({u.unitId for u in body.units}) != len(body.units):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Samme afdeling er angivet flere gange.")
+    total = sum(u.count for u in body.units)
+    if total > MAX_CODES:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            f"Højst {MAX_CODES} koder ad gangen (du bad om {total}).")
     sv = db.get(SurveyVersion, body.surveyVersionId)
-    if sv is None or sv.tenant_id != unit.tenant_id or sv.status != "published":
+    units: list[tuple[OrganizationUnit, int]] = []
+    for item in body.units:
+        unit = db.get(OrganizationUnit, item.unitId)
+        if unit is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ikke fundet.")
+        p.require_unit(db, unit.tenant_id, unit.id)
+        units.append((unit, item.count))
+    tenant_id = units[0][0].tenant_id
+    if any(u.tenant_id != tenant_id for u, _ in units):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Afdelingerne skal høre til samme tenant.")
+    if sv is None or sv.tenant_id != tenant_id or sv.status != "published":
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Spørgeskemaversionen er ikke publiceret.")
-    for t in body.groupTags:
-        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,40}", t):
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Ugyldigt gruppe-tag.")
     now = utcnow()
     vf = _naive_utc(body.validFrom) or now
     vt = _naive_utc(body.validTo) or (now + timedelta(days=60))
     if vt <= vf:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Slutdato skal være efter startdato.")
-    max_starts = 1 if body.oneTime else body.maxStarts
-    max_comp = 1 if body.oneTime else body.maxCompletions
-    created = []
-    for _ in range(body.count):
-        plain = generate_code()
-        norm = normalize_code(plain)
-        c = AccessCode(
-            tenant_id=unit.tenant_id, unit_id=unit.id, survey_version_id=sv.id,
-            lookup_hmac=code_lookup(norm), code_hash=argon2_hash(norm), label=body.label,
-            group_tags=body.groupTags, valid_from=vf, valid_to=vt, max_starts=max_starts,
-            max_completions=max_comp, one_time=body.oneTime, created_by=p.id,
-        )
-        db.add(c)
-        db.flush()
-        created.append({**_code_out(c), "code": plain})
-    audit.record("access_code.create", actor_type="user", actor_id=p.id, tenant_id=unit.tenant_id,
-                 target_type="unit", target_id=unit.id,
-                 details={"count": body.count, "oneTime": body.oneTime, "surveyVersionId": sv.id})
-    # Klartekst returneres KUN her, én gang. Kun Argon2id-hash gemmes.
-    return {"codes": created, "notice": "Koderne vises kun én gang. Gem dem sikkert nu."}
+
+    plain = [[generate_code() for _ in range(n)] for _, n in units]
+    flat = [normalize_code(c) for codes in plain for c in codes]
+    with ThreadPoolExecutor(max_workers=4) as pool:  # Argon2 frigiver GIL'en
+        hashes = iter(list(pool.map(argon2_hash, flat)))
+    parents = {u.id: u.name for u in db.scalars(select(OrganizationUnit).where(
+        OrganizationUnit.id.in_({u.parent_id for u, _ in units if u.parent_id} or {""})))}
+    sheets = []
+    for (unit, n), codes in zip(units, plain):
+        for i, c in enumerate(codes, 1):
+            prefix = f"{body.label} · " if body.label else ""
+            db.add(AccessCode(
+                tenant_id=tenant_id, unit_id=unit.id, survey_version_id=sv.id,
+                lookup_hmac=code_lookup(normalize_code(c)), code_hash=next(hashes),
+                label=f"{prefix}nr. {i} af {n}", group_tags=[], valid_from=vf, valid_to=vt,
+                created_by=p.id,
+            ))
+        sheets.append(code_sheets.UnitCodes(unit.name, parents.get(unit.parent_id), codes))
+    db.flush()
+    audit.record("access_code.create", actor_type="user", actor_id=p.id, tenant_id=tenant_id,
+                 target_type="survey_version", target_id=sv.id,
+                 details={"count": total, "units": {u.id: n for u, n in units}})
+    title = json.loads(sv.source_json).get("title", "Spørgeskema")
+    pdf = code_sheets.build(sheets, title, get_settings().public_origin, vt)
+    return RawResponse(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="adgangskoder-{now:%Y%m%d-%H%M}.pdf"',
+        "Cache-Control": "no-store",
+    })
 
 
 @router.get("/access-codes")

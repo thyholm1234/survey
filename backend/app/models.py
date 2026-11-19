@@ -325,6 +325,8 @@ class AdminSession(Base):
 
 
 class AccessCode(Base):
+    """Personlig adgangskode: højst én besvarelse ad gangen; deltageren logger ind igen med koden."""
+
     __tablename__ = "access_codes"
     __table_args__ = {"schema": "qa_identity"}
     id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)  # codeId
@@ -337,11 +339,8 @@ class AccessCode(Base):
     group_tags: Mapped[list] = mapped_column(JSON, default=list)
     valid_from: Mapped[datetime] = mapped_column(DT)
     valid_to: Mapped[datetime] = mapped_column(DT)
-    max_starts: Mapped[int | None] = mapped_column(Integer)
-    max_completions: Mapped[int | None] = mapped_column(Integer)
     starts_count: Mapped[int] = mapped_column(Integer, default=0)
     completions_count: Mapped[int] = mapped_column(Integer, default=0)
-    one_time: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(16), default="active")  # active|disabled
     created_by: Mapped[str] = mapped_column(ID)
     created_at: Mapped[datetime] = mapped_column(DT, default=utcnow)
@@ -376,8 +375,10 @@ class ResponseSession(Base):
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
-class ResumeKey(Base):
-    __tablename__ = "resume_keys"
+class ResponseLink(Base):
+    """Kobling personlig kode → besvarelse. Ligger i qa_identity, så analysedata ikke indeholder kode-id."""
+
+    __tablename__ = "response_links"
     __table_args__ = {"schema": "qa_identity"}
     id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)
     response_id: Mapped[str] = mapped_column(
@@ -386,9 +387,7 @@ class ResumeKey(Base):
     access_code_id: Mapped[str] = mapped_column(
         ForeignKey("qa_identity.access_codes.id", ondelete="CASCADE")
     )
-    lookup_hmac: Mapped[str] = mapped_column(String(64), unique=True)
-    key_hash: Mapped[str] = mapped_column(String(255))  # Argon2id
-    expires_at: Mapped[datetime] = mapped_column(DT)
+    expires_at: Mapped[datetime] = mapped_column(DT)  # opbevaringsperiodens udløb
 
 
 class RateLimit(Base):

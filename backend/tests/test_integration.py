@@ -70,11 +70,25 @@ def respondent_start(client, code: str) -> dict:
     return r.json()
 
 
-def make_code(client, org, unit="school", **kw) -> str:
-    r = client.post("/api/admin/access-codes", json={"unitId": org["units"][unit], "surveyVersionId": org["sv"], **kw},
-                    headers=H(org["csrf"]))
-    assert r.status_code == 201, r.text
-    return r.json()["codes"][0]["code"]
+def pdf_codes(pdf: bytes) -> list[str]:
+    """Klartekstkoderne findes kun i PDF'en – træk dem ud af sidernes tekst."""
+    import re
+    import zlib
+
+    streams = b"".join(zlib.decompress(m) for m in re.findall(rb"stream\n(.*?)\nendstream", pdf, re.DOTALL))
+    return [m.decode() for m in re.findall(rb"/M [0-9.]+ Tf [0-9. ]+ Td \(([A-Z0-9-]+)\) Tj", streams)]
+
+
+def issue_codes(client, csrf, sv, units: dict[str, int], expect=200):
+    r = client.post("/api/admin/access-codes", json={"surveyVersionId": sv,
+                                                     "units": [{"unitId": u, "count": n} for u, n in units.items()]},
+                    headers=H(csrf))
+    assert r.status_code == expect, r.text
+    return r
+
+
+def make_code(client, org, unit="school") -> str:
+    return pdf_codes(issue_codes(client, org["csrf"], org["sv"], {org["units"][unit]: 1}).content)[0]
 
 
 def test_full_respondent_flow_and_resume(client, org):
@@ -107,14 +121,16 @@ def test_full_respondent_flow_and_resume(client, org):
         # andre respondenters svar kan ikke tilgås
         assert resp_client.get("/api/respondent/sessions/deadbeefdeadbeefdeadbeefdeadbeef/next").status_code == 404
 
-    with TestClient(create_app(), base_url="https://testserver") as other:
-        r = other.post("/api/respondent/resume", json={"resumeKey": start["resumeKey"]})
+    with TestClient(create_app(), base_url="https://testserver") as other:  # login igen fra en anden enhed
+        v = other.post("/api/respondent/access-code/verify", json={"code": code}).json()
+        r = other.post("/api/respondent/continue", json={"ticket": v["ticket"]})
         assert r.status_code == 200
         st2 = other.get(f"/api/respondent/sessions/{rid}/next").json()
         assert [o["questionId"] for o in st2["order"]] == [o["questionId"] for o in order]
         assert st2["resumePosition"] == 2
         assert other.post(f"/api/respondent/sessions/{rid}/complete", json={}).status_code == 200
-        assert other.post("/api/respondent/resume", json={"resumeKey": start["resumeKey"]}).status_code == 400
+        v = other.post("/api/respondent/access-code/verify", json={"code": code}).json()
+        assert other.post("/api/respondent/continue", json={"ticket": v["ticket"]}).status_code == 409
 
     with get_engine().connect() as c:
         a = c.execute(text(f"SELECT change_count, changed_after_back, rt_ms, global_position FROM "
@@ -131,11 +147,87 @@ def test_full_respondent_flow_and_resume(client, org):
         assert resp.seed and "expect" in resp.block_order and resp.survey_version_id == org["sv"]
 
 
-def test_one_time_code_single_use(client, org):
-    code = make_code(client, org, oneTime=True)
-    respondent_start(client, code)
-    r = client.post("/api/respondent/access-code/verify", json={"code": code})
-    assert r.status_code == 400
+def test_personal_code_login_withdraw_and_answer_again(client, org):
+    """Personlig kode: én besvarelse ad gangen; log ind igen for at fortsætte, trække tilbage og svare forfra."""
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    code = make_code(client, org)
+    with TestClient(create_app(), base_url="https://testserver") as rc:
+        first = respondent_start(rc, code)
+        rid = first["responseId"]
+
+        # Ny login med samme kode: påbegyndt besvarelse findes; en ny kan ikke startes
+        v = rc.post("/api/respondent/access-code/verify", json={"code": code}).json()
+        assert v["existing"] == {"status": "in_progress"}
+        r = rc.post("/api/respondent/sessions", json={"ticket": v["ticket"], "consent": True})
+        assert r.status_code == 409
+        v = rc.post("/api/respondent/access-code/verify", json={"code": code}).json()
+        r = rc.post("/api/respondent/continue", json={"ticket": v["ticket"]})
+        assert r.status_code == 200 and r.json()["responseId"] == rid
+        assert rc.post(f"/api/respondent/sessions/{rid}/complete", json={}).status_code == 200
+
+        # Efter indsendelse: kan ikke fortsætte, men kan trække tilbage og svare forfra med samme billet
+        v = rc.post("/api/respondent/access-code/verify", json={"code": code}).json()
+        assert v["existing"] == {"status": "completed"}
+        assert rc.post("/api/respondent/continue", json={"ticket": v["ticket"]}).status_code == 409
+        # Rettigheder kan udøves med selve adgangskoden
+        assert rc.post("/api/respondent/rights/export", json={"key": code}).json()["responseId"] == rid
+        assert rc.post("/api/respondent/withdraw", json={"ticket": v["ticket"]}).json() == {"withdrawn": True}
+        with get_engine().connect() as c:
+            n = c.execute(text(f"SELECT COUNT(*) FROM {qualified('qa_data', 'responses')} WHERE id=:r"), {"r": rid}).scalar()
+            assert n == 0
+        r = rc.post("/api/respondent/sessions", json={"ticket": v["ticket"], "consent": True})
+        assert r.status_code == 201 and r.json()["responseId"] != rid
+        assert rc.post("/api/respondent/withdraw", json={"ticket": v["ticket"]}).status_code == 400  # brugt
+
+    codes = client.get(f"/api/admin/access-codes?tenantId={org['tenant']}").json()
+    c = codes[0]
+    assert c["completions"] == 0 and c["starts"] == 2
+    with get_engine().connect() as c:
+        actions = {a for (a,) in c.execute(text(f"SELECT action FROM {qualified('qa_audit', 'audit_events')}"))}
+    assert "respondent.withdrawn" in actions
+
+
+def test_personal_codes_pdf_per_unit(client, org):
+    t, csrf, school = org["tenant"], org["csrf"], org["units"]["school"]
+    a = client.post(f"/api/admin/tenants/{t}/units", json={"name": "4.A", "parentId": school},
+                    headers=H(csrf)).json()["id"]
+    body = {"surveyVersionId": org["sv"], "label": "Forår",
+            "units": [{"unitId": a, "count": 3}, {"unitId": org["units"]["daycare"], "count": 2}]}
+    r = client.post("/api/admin/access-codes", json=body, headers=H(csrf))
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/pdf" and r.content.startswith(b"%PDF-1.4")
+    assert r.content.count(b"/Type /Page ") == 2 + 5  # forside pr. afdeling + én side pr. kode
+    codes = client.get(f"/api/admin/access-codes?tenantId={t}").json()
+    assert len(codes) == 5 and sorted(c["label"] for c in codes if c["unitId"] == a) == [
+        "Forår · nr. 1 af 3", "Forår · nr. 2 af 3", "Forår · nr. 3 af 3"]
+
+    dup = {**body, "units": [{"unitId": a, "count": 1}, {"unitId": a, "count": 1}]}
+    assert client.post("/api/admin/access-codes", json=dup, headers=H(csrf)).status_code == 422
+    # Afdelingsadmin kan kun udstede til egne enheder
+    ua = make_admin("unit.pdf", [{"role_code": "unit_admin", "tenant_id": t, "unit_id": org["units"]["daycare"]}])
+    csrf2 = login(client, ua)
+    r = client.post("/api/admin/access-codes", json=body, headers=H(csrf2))
+    assert r.status_code == 404
+
+
+def test_code_sheet_pdf_text_is_readable():
+    import re
+    import zlib
+    from datetime import datetime
+
+    from app.services import code_sheets
+
+    pdf = code_sheets.build([code_sheets.UnitCodes("3.A", "Nordskolen", ["ABCD-EFGH-JKMN"])],
+                            "Mestring (forældre)", "https://x.example", datetime(2027, 1, 31))
+    joined = b"".join(zlib.decompress(m) for m in re.findall(rb"stream\n(.*?)\nendstream", pdf, re.DOTALL))
+    assert b"(ABCD-EFGH-JKMN)" in joined
+    assert "(Sådan gør du)".encode("cp1252") in joined
+    assert "Mestring \\(forældre\\)".encode("cp1252") in joined  # parenteser escapes
+    xref = int(pdf.rsplit(b"startxref\n", 1)[1].split(b"\n")[0])
+    assert pdf[xref:xref + 4] == b"xref"
 
 
 def test_rate_limit_on_code_attempts(client, org):
@@ -179,9 +271,7 @@ def test_tenant_isolation(client, org):
     assert client.get(f"/api/admin/surveys?tenantId={t}").status_code == 404
     assert client.get(f"/api/admin/dashboard?tenantId={t}&surveyVersionId={org['sv']}").status_code == 404
     assert client.get(f"/api/admin/surveys/versions/{org['sv']}").status_code == 404
-    r = client.post("/api/admin/access-codes", json={"unitId": org["units"]["school"], "surveyVersionId": org["sv"]},
-                    headers=H(csrf))
-    assert r.status_code == 404
+    issue_codes(client, csrf, org["sv"], {org["units"]["school"]: 1}, expect=404)
     r = client.post("/api/admin/exports", json={"tenantId": t, "format": "long_csv",
                                                 "filters": {"surveyVersionId": org["sv"]}}, headers=H(csrf))
     assert r.status_code == 404
@@ -200,12 +290,8 @@ def test_unit_admin_scope_and_export_right(client, org):
     assert [u["id"] for u in units] == [org["units"]["daycare"]]
     assert client.post(f"/api/admin/tenants/{org['tenant']}/units", json={"name": "Y", "unitType": "other"},
                        headers=H(csrf)).status_code == 404
-    r = client.post("/api/admin/access-codes", json={"unitId": org["units"]["school"], "surveyVersionId": org["sv"]},
-                    headers=H(csrf))
-    assert r.status_code == 404
-    r = client.post("/api/admin/access-codes", json={"unitId": org["units"]["daycare"], "surveyVersionId": org["sv"]},
-                    headers=H(csrf))
-    assert r.status_code == 201
+    issue_codes(client, csrf, org["sv"], {org["units"]["school"]: 1}, expect=404)
+    issue_codes(client, csrf, org["sv"], {org["units"]["daycare"]: 1})
     r = client.post("/api/admin/exports", json={"tenantId": org["tenant"], "format": "report_html",
                                                 "filters": {"surveyVersionId": org["sv"]}}, headers=H(csrf))
     assert r.status_code == 403
@@ -289,9 +375,7 @@ def test_system_admin_deletes_tenant_with_all_data(client, org):
 
     t = org["tenant"]
     insert_responses(t, org["units"]["school"], org["sv"], 5)
-    r = client.post("/api/admin/access-codes", json={"unitId": org["units"]["school"], "surveyVersionId": org["sv"]},
-                    headers=H(org["csrf"]))
-    assert r.status_code == 201
+    issue_codes(client, org["csrf"], org["sv"], {org["units"]["school"]: 1})
     # Bruger med roller i en anden tenant skal overleve; org-admin uden andre roller fjernes
     keep_t = make_tenant(f"Bliver {uuid.uuid4().hex[:6]}")
     multi = make_admin(f"multi.{uuid.uuid4().hex[:6]}", [{"role_code": "org_admin", "tenant_id": t},
@@ -391,7 +475,7 @@ def test_data_subject_rights_export_and_erase(client, org):
     code = make_code(client, org)
     with TestClient(create_app(), base_url="https://testserver") as rc:
         start = respondent_start(rc, code)
-        rid, key = start["responseId"], start["resumeKey"]
+        rid, key = start["responseId"], code
         order = rc.get(f"/api/respondent/sessions/{rid}/next").json()["order"]
         q = order[0]["questionId"]
         rc.post(f"/api/respondent/sessions/{rid}/shown", json={"positions": [0, 1]})
@@ -401,8 +485,9 @@ def test_data_subject_rights_export_and_erase(client, org):
     with TestClient(create_app(), base_url="https://testserver") as other:  # ingen session/cookie
         # forkert kode afvises generisk
         assert other.post("/api/respondent/rights/export", json={"key": "WRONG-WRONG-WRONG"}).status_code == 400
-        # afsluttet besvarelse kan ikke genoptages, men kan eksporteres
-        assert other.post("/api/respondent/resume", json={"resumeKey": key}).status_code == 400
+        # afsluttet besvarelse kan ikke fortsættes, men kan eksporteres med adgangskoden
+        v = other.post("/api/respondent/access-code/verify", json={"code": key}).json()
+        assert other.post("/api/respondent/continue", json={"ticket": v["ticket"]}).status_code == 409
         r = other.post("/api/respondent/rights/export", json={"key": key})
         assert r.status_code == 200
         d = r.json()
@@ -434,8 +519,8 @@ def test_delete_subunit_keeps_responses_at_institution(client, org):
     a = client.post(f"/api/admin/tenants/{t}/units", json={"name": "9.A", "parentId": school},
                     headers=H(csrf)).json()["id"]
     insert_responses(t, a, org["sv"], 12, seed=7)
-    code = client.post("/api/admin/access-codes", json={"unitId": a, "surveyVersionId": org["sv"]},
-                       headers=H(csrf)).json()["codes"][0]["id"]
+    issue_codes(client, csrf, org["sv"], {a: 1})
+    code = next(c["id"] for c in client.get(f"/api/admin/access-codes?tenantId={t}").json() if c["unitId"] == a)
     ca = make_admin("unit.9a", [{"role_code": "unit_admin", "tenant_id": t, "unit_id": a}])
 
     # Institutioner kan ikke fjernes via dette endpoint

@@ -471,30 +471,55 @@ function unitsTab(panel) {
 // ------------------------------------------------------------------ Koder
 async function codesTab(panel) {
   const e = err('code-err');
-  const unit = h('select', {}, unitOptions());
   const sv = versionSelect('code-sv');
-  const count = h('input', { type: 'number', min: 1, max: 500, value: 1 });
-  const maxStarts = h('input', { type: 'number', min: 1 });
   const validTo = h('input', { type: 'date' });
-  const oneTime = h('input', { type: 'checkbox', id: 'onetime' });
-  const label = h('input', { type: 'text', maxlength: 200 });
-  const result = h('div');
+  const label = h('input', { type: 'text', maxlength: 100 });
+  const total = h('output', { text: '0' });
+  const inputs = new Map();
+  const units = unitsSorted();
+  const hasKids = new Set(units.filter((u) => u.parentId).map((u) => u.parentId));
+  const updateTotal = () => {
+    total.textContent = String([...inputs.values()].reduce((a, i) => a + (Number(i.value) || 0), 0));
+  };
+  const countRows = units.map((u) => {
+    const inp = h('input', { type: 'number', min: 0, max: 500, step: 1, inputmode: 'numeric', class: 'count-input',
+      'aria-label': `Antal koder til ${unitLabel(u)}`, placeholder: '0' });
+    inp.addEventListener('input', updateTotal);
+    inputs.set(u.id, inp);
+    const name = u.parentId
+      ? [h('span', { class: 'indent', 'aria-hidden': 'true', text: '└ ' }), u.name]
+      : [u.name, hasKids.has(u.id) ? h('span', { class: 'hint', text: ' (hele institutionen)' }) : null];
+    return h('tr', { class: u.parentId ? 'child' : '' }, h('th', { scope: 'row' }, ...name), h('td', {}, inp));
+  });
+  const btn = h('button', { type: 'submit' }, icon('download', 'icon-sm'), 'Generér koder og hent PDF');
   const form = h('form', { method: 'post', action: '/admin/' },
-    h('div', { class: 'filters' }, field('Institution / afdeling', unit), field('Spørgeskema', sv), field('Antal koder', count),
-      field('Maks. starter pr. kode', maxStarts, 'Tom = ubegrænset'), field('Gyldig til', validTo), field('Etiket', label)),
-    h('p', {}, oneTime, ' ', h('label', { for: 'onetime', text: 'Engangskoder (én besvarelse pr. kode – dubletkontrol)' })), e,
-    h('button', { type: 'submit', text: 'Generér koder' }));
+    h('p', { class: 'hint', text: 'Hver kode er personlig og giver én besvarelse. Deltageren kan logge ind igen med koden for at '
+      + 'fortsætte, trække sin besvarelse tilbage og svare forfra. PDF\'en har en forside til den ansvarlige for hver afdeling '
+      + 'og derefter én side pr. kode med vejledning, kode og QR-kode. Højst 1000 koder ad gangen.' }),
+    h('div', { class: 'filters' }, field('Spørgeskema', sv), field('Gyldig til', validTo, 'Tom = 60 dage'),
+      field('Etiket (valgfri)', label, 'Fx "Forår 2027"')),
+    table('Antal koder pr. afdeling', ['Institution / afdeling', 'Antal'], countRows),
+    h('p', {}, 'Koder i alt: ', total), e, btn);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const r = await guard(() => api('POST', '/api/admin/access-codes', {
-      unitId: unit.value, surveyVersionId: sv.value, count: Number(count.value), label: label.value || null,
-      maxStarts: maxStarts.value ? Number(maxStarts.value) : null, oneTime: oneTime.checked,
-      validTo: validTo.value ? `${validTo.value}T23:59:59Z` : null }), e);
-    if (!r) return;
-    clear(result).append(h('p', { class: 'notice', text: r.notice }),
-      h('pre', { class: 'json', text: r.codes.map((c) => c.code).join('\n') }),
-      h('button', { type: 'button', class: 'secondary', onclick: () => navigator.clipboard.writeText(r.codes.map((c) => c.code).join('\n')) }, icon('copy', 'icon-sm'), 'Kopiér alle'));
-    refresh();
+    const items = [...inputs].map(([unitId, i]) => ({ unitId, count: Number(i.value) || 0 })).filter((x) => x.count > 0);
+    if (!items.length) { e.textContent = 'Angiv antal koder for mindst én afdeling.'; return; }
+    btn.disabled = true;
+    announce('Genererer koder – det tager ca. et minut pr. 1000 koder…');
+    try {
+      const res = await guard(() => api('POST', '/api/admin/access-codes', {
+        surveyVersionId: sv.value, units: items, label: label.value || null,
+        validTo: validTo.value ? `${validTo.value}T23:59:59Z` : null }, { raw: true }), e);
+      if (!res) return;
+      const blob = await res.blob();
+      const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'adgangskoder.pdf';
+      const a = h('a', { href: URL.createObjectURL(blob), download: name });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      announce('PDF hentet. Koderne kan ikke vises igen – gem filen sikkert.');
+      inputs.forEach((i) => { i.value = ''; }); updateTotal();
+      refresh();
+    } finally { btn.disabled = false; }
   });
   const list = h('div');
   const refresh = async () => {
@@ -503,11 +528,12 @@ async function codesTab(panel) {
     const uname = Object.fromEntries(app.units.map((u) => [u.id, unitLabel(u)]));
     clear(list).append(table('Udstedte koder (kun hash gemmes)', ['Institution / afdeling', 'Etiket', 'Gyldig til', 'Starter', 'Fuldførte', 'Status', ''],
       codes.map((c) => row(uname[c.unitId] || c.unitId, [c.label, new Date(c.validTo).toLocaleDateString('da-DK'),
-        `${c.starts}${c.maxStarts ? ` / ${c.maxStarts}` : ''}`, String(c.completions), c.status,
+        String(c.starts), String(c.completions), c.status,
         h('td', {}, c.status === 'active' ? h('button', { type: 'button', class: 'secondary', text: 'Deaktivér', onclick: async () => {
           await guard(() => api('POST', `/api/admin/access-codes/${c.id}/disable`, {})); refresh(); } }) : '')]))));
   };
-  panel.append(heading('codes', 'Adgangskoder'), h('section', { class: 'card' }, form, result), list);
+  panel.append(heading('codes', 'Adgangskoder'),
+    units.length ? h('section', { class: 'card' }, form) : h('p', { class: 'notice', text: 'Opret først institutioner og afdelinger.' }), list);
   refresh();
 }
 

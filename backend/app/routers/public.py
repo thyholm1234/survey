@@ -16,7 +16,7 @@ def legal_info():
             "contact": s.operator_contact, "dpo": s.dpo_contact, "security": s.security_contact,
         },
         "hosting": {"provider": s.hosting_provider, "location": s.hosting_location},
-        "retention": {"defaultMonths": s.default_retention_months, "resumeKeyDays": s.resume_key_ttl_days},
+        "retention": {"defaultMonths": s.default_retention_months},
         "cookies": [
             {"name": RESP_COOKIE, "purpose": "Holder din besvarelse sammen, mens du svarer.",
              "idleMinutes": s.respondent_session_ttl // 60, "maxHours": s.respondent_session_max // 3600},
