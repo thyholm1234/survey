@@ -444,6 +444,23 @@ label.check { font-weight: 400; display: flex; align-items: center; gap: 0.25rem
 form + form { margin-block-start: 1.5rem; }
 fieldset:has(.check-list) { border: 1px solid var(--border-control); border-radius: var(--radius-md); padding: 0.75rem 1rem; min-inline-size: 0; }
 fieldset:has(.check-list) legend { font-weight: 600; padding-inline: 0.25rem; }
+/* Dropdown med flueben (institutioner og afdelinger) */
+.field > .label { font-weight: 600; font-size: 0.9375rem; }
+details.picker { position: relative; }
+.picker-summary { list-style: none; cursor: pointer; padding: 0.7rem 2.4rem 0.7rem 0.8rem; min-height: 48px; border: 1px solid var(--border-control);
+  border-radius: var(--radius-md); background: var(--surface); color: var(--text-primary); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; position: relative; }
+.picker-summary::-webkit-details-marker { display: none; }
+.picker-summary::after { content: ""; position: absolute; right: 0.9rem; top: 50%; width: 0.5rem; height: 0.5rem;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-70%) rotate(45deg); }
+details.picker[open] .picker-summary::after { transform: translateY(-30%) rotate(-135deg); }
+.picker-summary:focus-visible { outline: 3px solid var(--focus, #2563eb); outline-offset: 2px; }
+.picker-panel { position: absolute; z-index: 20; inset-inline: 0; min-width: min(22rem, 90vw); margin-top: 0.25rem; padding: 0.75rem 1rem;
+  background: var(--surface); border: 1px solid var(--border-control); border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
+.picker-panel .hint { margin-block: 0 0.5rem; }
+.picker-list { max-height: 18rem; overflow-y: auto; display: flex; flex-direction: column; }
+.picker-list label.check { min-height: 36px; }
+.picker-list label.check.child { padding-inline-start: 1.5rem; }
 /* Udstedte koder: bestillinger med afdelingsblokke */
 .code-batch .batch-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-block-end: 0.5rem; }
 .code-batch h4 { margin: 0; }

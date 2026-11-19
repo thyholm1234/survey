@@ -152,15 +152,6 @@ function unitsSorted() {
   return [...app.units].sort((a, b) => { const ka = key(a); const kb = key(b);
     for (let i = 0; i < 3; i++) { const c = String(ka[i]).localeCompare(String(kb[i]), 'da'); if (c) return c; } return 0; });
 }
-/** Institutioner brugeren har adgang til (også hvis kun en afdeling/klasse er tilgængelig). */
-function institutionsList() {
-  const m = new Map();
-  for (const u of app.units) {
-    const id = u.parentId || u.id;
-    if (!m.has(id)) m.set(id, { id, name: u.parentId ? u.parentName : u.name, unitType: u.unitType });
-  }
-  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name, 'da'));
-}
 function unitOptions() { return unitsSorted().map((u) => h('option', { value: u.id, text: unitLabel(u) })); }
 function isOrgAdmin() { return app.who?.orgTenants?.includes(app.tenantId); }
 
@@ -191,14 +182,7 @@ function filterForm(onSubmit, { withThresholds = false } = {}) {
   const sv = versionSelect();
   const unitType = h('select', { id: 'f-type' }, h('option', { value: '', text: 'Alle' }),
     Object.entries(UNIT_TYPES).map(([k, v]) => h('option', { value: k, text: v })));
-  const inst = h('select', { id: 'f-inst' }, h('option', { value: '', text: 'Alle institutioner' }),
-    institutionsList().map((i) => h('option', { value: i.id, text: i.name })));
-  const unit = h('select', { id: 'f-unit', disabled: true }, h('option', { value: '', text: 'Hele institutionen' }));
-  inst.addEventListener('change', () => {
-    const kids = unitsSorted().filter((u) => u.parentId && u.parentId === inst.value);
-    clear(unit).append(h('option', { value: '', text: 'Hele institutionen' }), ...kids.map((u) => h('option', { value: u.id, text: u.name })));
-    unit.disabled = !kids.length;
-  });
+  const picker = unitPicker();
   const from = h('input', { type: 'date', id: 'f-from' });
   const to = h('input', { type: 'date', id: 'f-to' });
   const bgWrap = h('div', { class: 'filters' });
@@ -215,18 +199,53 @@ function filterForm(onSubmit, { withThresholds = false } = {}) {
   const thr = h('input', { type: 'number', id: 'f-thr', min: 0.5, max: 1, step: 0.05, value: 0.8 });
   const btn = h('button', { type: 'submit', text: 'Vis' });
   const form = h('form', { method: 'get', action: '/admin/' },
-    h('search', {}, h('div', { class: 'filters' }, field('Spørgeskema', sv), field('Type', unitType), field('Institution', inst), field('Afdeling/klasse', unit),
+    h('search', {}, h('div', { class: 'filters' }, field('Spørgeskema', sv), field('Type', unitType), picker.el,
       field('Fra dato', from), field('Til dato', to), withThresholds ? field('Subskala-tærskel', thr, 'Andel besvarede items') : null),
     bgWrap, btn));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const bg = {};
     bgWrap.querySelectorAll('select[data-bg]').forEach((x) => { if (x.value) bg[x.dataset.bg] = x.value; });
-    onSubmit({ surveyVersionId: sv.value, unitIds: unit.value ? [unit.value] : inst.value ? [inst.value] : null, unitType: unitType.value || null,
+    const chosen = picker.value();
+    onSubmit({ surveyVersionId: sv.value, unitIds: chosen.length ? chosen : null, unitType: unitType.value || null,
       dateFrom: from.value || null, dateTo: to.value || null, background: bg }, Number(thr.value));
   });
   loadBg();
   return form;
+}
+/** Dropdown med flueben: institutioner og deres afdelinger/klasser. Tomt valg = alle. */
+function unitPicker() {
+  const units = unitsSorted();
+  const summary = h('summary', { class: 'picker-summary' });
+  const boxes = [];
+  const list = h('div', { class: 'picker-list', role: 'group', 'aria-label': 'Institutioner og afdelinger' });
+  const update = () => {
+    const sel = boxes.filter((b) => b.checked);
+    summary.textContent = !sel.length ? 'Alle institutioner'
+      : sel.length <= 2 ? sel.map((b) => b.dataset.label).join(', ') : `${sel.length} valgt`;
+  };
+  for (const u of units) {
+    const id = `pick-${u.id}`;
+    const cb = h('input', { type: 'checkbox', id, value: u.id });
+    cb.dataset.label = unitLabel(u);
+    cb.addEventListener('change', update);
+    boxes.push(cb);
+    list.append(h('label', { class: `check${u.parentId ? ' child' : ''}`, for: id }, cb,
+      u.parentId ? ` ${u.name}` : h('strong', { text: ` ${u.name}` })));
+  }
+  const clearBtn = h('button', { type: 'button', class: 'link', text: 'Ryd valg',
+    onclick: () => { boxes.forEach((b) => { b.checked = false; }); update(); } });
+  const details = h('details', { class: 'picker' }, summary,
+    h('div', { class: 'picker-panel' },
+      h('p', { class: 'hint', text: 'Sæt flueben ved det, du vil sammenligne. En institution omfatter sine afdelinger/klasser.' }),
+      units.length ? list : h('p', { text: 'Ingen institutioner.' }), clearBtn));
+  // Luk ved klik udenfor eller Escape
+  document.addEventListener('click', (e) => { if (details.open && !details.contains(e.target)) details.open = false; });
+  details.addEventListener('keydown', (e) => { if (e.key === 'Escape') { details.open = false; summary.focus(); } });
+  update();
+  const el = h('div', { class: 'field' }, h('span', { class: 'label', id: 'pick-lbl', text: 'Institutioner og afdelinger' }), details);
+  summary.setAttribute('aria-describedby', 'pick-lbl');
+  return { el, value: () => boxes.filter((b) => b.checked).map((b) => b.value) };
 }
 function filtersToQuery(f) {
   const q = new URLSearchParams({ tenantId: app.tenantId, surveyVersionId: f.surveyVersionId });
@@ -331,12 +350,16 @@ function renderDashboard(out, d) {
 
   // 3. Afdelinger (alfabetisk – ikke rangliste)
   const byInst = d.comparisonLevel === 'institution';
-  const cmpTitle = byInst ? 'Institutioner' : `Afdelinger/klasser${d.institution ? ` – ${d.institution.name}` : ''}`;
+  const custom = d.comparisonLevel === 'custom';
+  const cmpTitle = byInst ? 'Institutioner' : custom ? 'Valgte institutioner og afdelinger'
+    : `Afdelinger/klasser${d.institution ? ` – ${d.institution.name}` : ''}`;
   out.append(h('section', { class: 'card' }, h('h3', { text: `3. ${cmpTitle} (alfabetisk, ikke rangliste)` }),
     h('p', { class: 'hint', text: byInst
-      ? 'Hver institution omfatter alle sine afdelinger/klasser. Vælg en institution i filteret for at sammenligne dens afdelinger/klasser.'
-      : 'Profilen ovenfor er hele institutionens resultat; her sammenlignes dens afdelinger/klasser.' }),
-    table(cmpTitle, [byInst ? 'Institution' : 'Afdeling/klasse', 'Type', 'N', ...d.subscales.map((x) => `${x.name} (95 % CI)`)],
+      ? 'Hver institution omfatter alle sine afdelinger/klasser. Vælg institutioner og afdelinger i filteret for at sammenligne dem.'
+      : custom ? 'Hver valgt institution omfatter sine afdelinger/klasser. Er en institution valgt sammen med nogle af sine '
+        + 'afdelinger, vises de valgte afdelinger for sig og institutionen som »øvrige«, så ingen besvarelse tælles to gange.'
+        : 'Profilen ovenfor er hele institutionens resultat; her sammenlignes dens afdelinger/klasser.' }),
+    table(cmpTitle, [byInst ? 'Institution' : custom ? 'Institution / afdeling' : 'Afdeling/klasse', 'Type', 'N', ...d.subscales.map((x) => `${x.name} (95 % CI)`)],
       d.units.map((u) => u.suppressed ? row(u.name, [UNIT_TYPES[u.unitType], supCell(1 + d.subscales.length)]) :
         row(u.name, [UNIT_TYPES[u.unitType], u.n, ...u.subscales.map((c) => c.suppressed ? supCell() :
           h('td', { text: `${fmt(c.mean)} (${c.ci95 ? `${fmt(c.ci95[0])}–${fmt(c.ci95[1])}` : '–'})` }))])))));

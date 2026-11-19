@@ -170,6 +170,7 @@ def report_html(dash: dict, proto: dict, title: str) -> str:
                          f"<td>{_fmt(ci[0])}–{_fmt(ci[1])}</td></tr>")
         parts.append("</tbody></table>")
         lvl = "Institutioner" if dash.get("comparisonLevel") == "institution" else (
+            "Valgte institutioner og afdelinger" if dash.get("comparisonLevel") == "custom" else None) or (
             f"Afdelinger/klasser – {dash['institution']['name']}" if dash.get("institution") else "Afdelinger/klasser")
         parts.append(f"<table><caption>{e(lvl)} (alfabetisk, ikke rangliste; middel)</caption><thead><tr>"
                      "<th scope='col'>Navn</th><th scope='col'>N</th>"

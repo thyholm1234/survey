@@ -81,13 +81,32 @@ def build(ds: Dataset, f: Filters, k: int, sub_thr: float, dom_thr: float) -> di
         for d in doms for s in subs
     ]
     # 3. Sammenligning (alfabetisk, ikke rangliste).
-    #    Flere institutioner i udvalget → sammenlign institutioner (inkl. deres afdelinger/klasser).
-    #    Én institution → sammenlign dens afdelinger/klasser; besvarelser direkte på institutionen
-    #    vises som egen række.
+    #    Intet valg / flere institutioner → sammenlign institutioner (inkl. deres afdelinger/klasser).
+    #    Præcis én institution valgt → sammenlign dens afdelinger/klasser.
+    #    Konkret udvalg (flere enheder) → hver valgt enhed er en gruppe. Grupperne overlapper aldrig: er både
+    #    en institution og nogle af dens afdelinger valgt, dækker institutionen kun de øvrige ("øvrige").
     institutions = ds.responses["institution_id"].unique().tolist()
-    level = "institution" if len(institutions) > 1 else "subunit"
-    key = "institution_id" if level == "institution" else "unit_id"
-    sizes = ds.responses.groupby(key).size().to_dict()
+    selected = set(f.unitIds or []) & set(ds.units)
+    inst_only = len(selected) == 1 and ds.units[next(iter(selected))]["parentId"] is None
+    if selected and not inst_only:
+        level = "custom"
+        split = {ds.units[u]["parentId"] for u in selected if ds.units[u]["parentId"] in selected}
+
+        def group_of(unit_id: str) -> str:
+            if unit_id in selected:
+                return unit_id
+            return ds.units[unit_id]["institutionId"]
+
+        resp = ds.responses.assign(group_id=ds.responses["unit_id"].map(group_of))
+        for df in (sub, dom):
+            df["group_id"] = df["unit_id"].map(group_of)
+        key = "group_id"
+    else:
+        level = "institution" if len(institutions) > 1 else "subunit"
+        key = "institution_id" if level == "institution" else "unit_id"
+        resp = ds.responses
+        split = set()
+    sizes = resp.groupby(key).size().to_dict()
     hidden = secondary_suppression(sizes, k)
 
     def label(gid: str) -> tuple[str, str]:
@@ -95,6 +114,10 @@ def build(ds: Dataset, f: Filters, k: int, sub_thr: float, dom_thr: float) -> di
         if info is None:  # institution uden for udvalget (kun dens afdelinger er med)
             info = next(v for v in ds.units.values() if v["institutionId"] == gid)
             return info["institutionName"], info["unitType"]
+        if level == "custom":
+            if info["parentId"] is None:
+                return (f"{info['name']} (øvrige)" if gid in split else info["name"]), info["unitType"]
+            return f"{info['institutionName']} › {info['name']}", info["unitType"]
         if level == "subunit" and info["parentId"] is None and len(sizes) > 1:
             return f"{info['name']} (uden afdeling/klasse)", info["unitType"]
         return (info["institutionName"] if level == "institution" else info["name"]), info["unitType"]

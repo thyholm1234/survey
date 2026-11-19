@@ -614,3 +614,34 @@ def test_codes_are_grouped_in_batches_with_unit_blocks(client, org):
     assert r.json() == {"disabled": 2}
     codes = client.get(f"/api/admin/access-codes?tenantId={t}").json()
     assert sum(c["status"] == "active" for c in codes) == 1  # den anden bestilling er urørt
+
+
+def test_dashboard_compares_selected_units_without_overlap(client, org):
+    t, csrf, school, daycare = org["tenant"], org["csrf"], org["units"]["school"], org["units"]["daycare"]
+
+    def mk(name):
+        return client.post(f"/api/admin/tenants/{t}/units", json={"name": name, "parentId": school},
+                           headers=H(csrf)).json()["id"]
+
+    a, b = mk("6.A"), mk("6.B")
+    insert_responses(t, a, org["sv"], 12, seed=11)
+    insert_responses(t, b, org["sv"], 12, seed=12)
+    insert_responses(t, daycare, org["sv"], 12, seed=13)
+    base = f"/api/admin/dashboard?tenantId={t}&surveyVersionId={org['sv']}"
+
+    # En klasse og en anden institution sammenlignes direkte
+    d = client.get(f"{base}&unitIds={a},{daycare}").json()
+    assert d["comparisonLevel"] == "custom" and d["n"] == 24
+    assert {u["name"]: u["n"] for u in d["units"]} == {"Dagtilbud A": 12, "Skole B › 6.A": 12}
+    # Institution + en af dens klasser: klassen for sig, institutionen som »øvrige« (ingen dobbelttælling)
+    d = client.get(f"{base}&unitIds={school},{a}").json()
+    assert {u["name"]: u["n"] for u in d["units"]} == {"Skole B (øvrige)": 12, "Skole B › 6.A": 12}
+    assert d["n"] == 24
+    # Kun én institution: som før sammenlignes dens afdelinger/klasser
+    d = client.get(f"{base}&unitIds={school}").json()
+    assert d["comparisonLevel"] == "subunit" and [u["name"] for u in d["units"]] == ["6.A", "6.B"]
+    # Rapport (HTML) bruger samme sammenligning
+    r = client.post("/api/admin/exports", json={"tenantId": t, "format": "report_html",
+                                                "filters": {"surveyVersionId": org["sv"], "unitIds": [a, daycare]}},
+                    headers=H(csrf))
+    assert r.status_code == 200 and "Valgte institutioner og afdelinger" in r.text and "Skole B › 6.A" in r.text
