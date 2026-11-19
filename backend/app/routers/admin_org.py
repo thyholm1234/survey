@@ -8,7 +8,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,15 @@ from ..db import get_db
 from ..deps import ROLE_ORG, ROLE_SYSTEM, ROLE_UNIT, Principal, admin, system_admin
 from ..models import (
     AccessCode,
+    AnalysisRun,
+    Domain,
     OrganizationUnit,
+    Question,
+    Response,
+    ResponseScale,
+    Scenario,
+    Subscale,
+    Survey,
     SurveyVersion,
     Tenant,
     User,
@@ -88,6 +96,62 @@ def update_tenant(tenant_id: str, body: TenantIn, p: Principal = Depends(system_
     audit.record("tenant.update", actor_type="user", actor_id=p.id, tenant_id=t.id, target_type="tenant",
                  target_id=t.id, details={"minCellSize": t.min_cell_size, "retentionMonths": t.retention_months})
     return _tenant_out(t)
+
+
+class TenantDeleteIn(Strict):
+    confirmName: str = Name
+
+
+@router.post("/tenants/{tenant_id}/delete")
+def delete_tenant(tenant_id: str, body: TenantDeleteIn, p: Principal = Depends(system_admin),
+                  db: Session = Depends(get_db)):
+    """Sletter en tenant og AL tilhørende data permanent. Auditloggen bevares (append-only)."""
+    t = db.get(Tenant, tenant_id)
+    if t is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ikke fundet.")
+    if body.confirmName != t.name:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Navnet matcher ikke tenantens navn.")
+    name = t.name
+    sv_ids = select(SurveyVersion.id).where(SurveyVersion.tenant_id == tenant_id).scalar_subquery()
+    counts: dict[str, int] = {}
+
+    def run(key: str, stmt) -> None:
+        counts[key] = db.execute(stmt.execution_options(synchronize_session=False)).rowcount or 0
+
+    # Brugere der KUN har roller i denne tenant fjernes sammen med den
+    tenant_users = set(db.scalars(select(UserScope.user_id).where(UserScope.tenant_id == tenant_id)))
+    other_users = set(db.scalars(select(UserScope.user_id).where(
+        UserScope.user_id.in_(tenant_users or {""}),
+        (UserScope.tenant_id != tenant_id) | UserScope.tenant_id.is_(None))))
+    orphan_users = tenant_users - other_users
+    if p.id in orphan_users:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Du kan ikke slette din egen konto.")
+
+    # Markér tenanten; DB-triggerne tillader først da sletning af publicerede spørgeskemaversioner
+    t.status = "deleting"
+    db.flush()
+    run("analysisRuns", delete(AnalysisRun).where(AnalysisRun.tenant_id == tenant_id))
+    # Svar, præsentationshændelser, sessioner og genoptagelsesnøgler slettes via ON DELETE CASCADE
+    run("responses", delete(Response).where(Response.tenant_id == tenant_id))
+    run("accessCodes", delete(AccessCode).where(AccessCode.tenant_id == tenant_id))
+    run("userScopes", delete(UserScope).where(UserScope.tenant_id == tenant_id))
+    if orphan_users:
+        run("users", delete(User).where(User.id.in_(orphan_users)))
+    run("questions", delete(Question).where(Question.survey_version_id.in_(sv_ids)))
+    run("scenarios", delete(Scenario).where(Scenario.survey_version_id.in_(sv_ids)))
+    run("domains", delete(Domain).where(Domain.survey_version_id.in_(sv_ids)))
+    run("subscales", delete(Subscale).where(Subscale.survey_version_id.in_(sv_ids)))
+    run("responseScales", delete(ResponseScale).where(ResponseScale.survey_version_id.in_(sv_ids)))
+    run("surveyVersions", delete(SurveyVersion).where(SurveyVersion.tenant_id == tenant_id))
+    run("surveys", delete(Survey).where(Survey.tenant_id == tenant_id))
+    db.execute(update(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id).values(parent_id=None)
+               .execution_options(synchronize_session=False))
+    run("units", delete(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id))
+    db.expunge(t)
+    db.execute(delete(Tenant).where(Tenant.id == tenant_id))
+    audit.record("tenant.delete", actor_type="user", actor_id=p.id, tenant_id=tenant_id, target_type="tenant",
+                 target_id=tenant_id, details={"name": name, "deleted": counts})
+    return {"ok": True, "deleted": counts}
 
 
 # ---------------------------------------------------------------------------

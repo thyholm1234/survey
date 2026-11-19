@@ -59,6 +59,13 @@ Origin-tjek, og cookies er `__Host-`/`Secure`, så login kræver HTTPS gennem pr
 Krav til proxyen: videresend `X-Forwarded-For` og `X-Forwarded-Proto` (uvicorn stoler kun på dem fra
 `FORWARDED_ALLOW_IPS`), begræns request body til ~2 MB, og maskér/udelad IP og cookies i adgangsloggen.
 
+Systemadmin har bevidst ikke adgang til tenant-indhold. For at oprette spørgeskemaer: opret en tenant
+under fanen *Tenants* med en første organisationsadmin, og log ind som den bruger. Mistet
+engangsadgangskode: `docker compose exec api python -m app.cli reset-password <brugernavn>`.
+Systemadmin kan slette en tenant (fanen *Tenants* → *Slet*, bekræft ved at skrive navnet). Det sletter
+permanent afdelinger, spørgeskemaer (også publicerede), adgangskoder, besvarelser, analyser og brugere
+der kun har adgang til den tenant. Auditloggen bevares.
+
 Engangsadgangskoder udskrives én gang. Ved første login opsættes TOTP (QR-kode) og adgangskoden skal
 skiftes (min. 14 tegn). `seed-demo` opretter `demo.org` (organisationsadmin med eksportret),
 `demo.unit` (afdelingsadmin), seks afdelinger (3 dagtilbud, 3 skole), én kode pr. afdeling og ca. 150
@@ -78,7 +85,7 @@ Publicerede spørgeskemaversioner er beskyttet af DB-triggere (kan ikke ændres 
 ## Test
 
 ```bash
-docker compose --profile test run --rm test          # 59 tests: unit, property, statistik, integration
+docker compose --profile test run --rm test          # 61 tests: unit, property, statistik, integration
 python3 scripts/smoke_test.py --code <KODE> --admin <bruger> --password <pw> --new-password <ny>
 ```
 

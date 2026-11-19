@@ -576,6 +576,7 @@ async function tenantsTab(panel) {
   const ret = h('input', { type: 'number', min: 1, max: 120, value: 24 });
   const orgUser = h('input', { type: 'text', autocomplete: 'off', autocapitalize: 'none' });
   const result = h('div');
+  if (app.flash) { result.append(app.flash); app.flash = null; }
   const form = h('form', { method: 'post', action: '/admin/' }, h('div', { class: 'filters' }, field('Navn', name), field('Min. cellestørrelse', k), field('Opbevaring (måneder)', ret),
     field('Første organisationsadmin (brugernavn)', orgUser)), e, h('button', { type: 'submit', text: 'Opret tenant' }));
   form.addEventListener('submit', async (ev) => {
@@ -584,7 +585,8 @@ async function tenantsTab(panel) {
       const t = await api('POST', '/api/admin/tenants', { name: name.value, minCellSize: Number(k.value), retentionMonths: Number(ret.value) });
       if (orgUser.value) {
         const u = await api('POST', '/api/admin/users', { username: orgUser.value, role: 'org_admin', tenantId: t.id, canExport: false });
-        clear(result).append(h('p', { class: 'notice', text: `Engangsadgangskode for ${u.username}: ` }, h('code', { text: u.initialPassword })));
+        // shell() gentegner fanen – gem beskeden så den overlever gentegningen (vises kun én gang)
+        app.flash = h('p', { class: 'notice', role: 'status', text: `Engangsadgangskode for ${u.username} (vises kun nu – log ud og log ind som denne bruger for at oprette spørgeskemaer): ` }, h('code', { text: u.initialPassword }));
       }
       app.allTenants = await api('GET', '/api/admin/tenants');
       shell();
@@ -593,7 +595,23 @@ async function tenantsTab(panel) {
   panel.append(h('h2', { text: 'Tenants' }),
     h('p', { class: 'hint', text: 'Systemadministratorer kan ikke som standard se besvarelser.' }),
     h('section', { class: 'card' }, form, result),
-    table('Tenants', ['Navn', 'Min. celle', 'Opbevaring (mdr.)', 'Status'], app.allTenants.map((t) => row(t.name, [t.minCellSize, t.retentionMonths, t.status]))));
+    table('Tenants', ['Navn', 'Min. celle', 'Opbevaring (mdr.)', 'Status', 'Handling'], app.allTenants.map((t) => row(t.name, [t.minCellSize, t.retentionMonths, t.status,
+      h('td', {}, h('button', { type: 'button', class: 'secondary', text: 'Slet', 'aria-label': `Slet tenant ${t.name}`, onclick: () => deleteTenant(t, e) }))]))));
+}
+
+async function deleteTenant(t, e) {
+  const typed = window.prompt(`Slet tenant "${t.name}" PERMANENT?\n\nAlle afdelinger, spørgeskemaer, adgangskoder, besvarelser og analyser slettes, `
+    + 'og brugere der kun har adgang til denne tenant fjernes. Auditloggen bevares. Handlingen kan ikke fortrydes.\n\n'
+    + 'Skriv tenantens navn for at bekræfte:');
+  if (typed === null) return;
+  if (typed.trim() !== t.name) { e.textContent = 'Navnet matchede ikke – intet blev slettet.'; return; }
+  const r = await guard(() => api('POST', `/api/admin/tenants/${t.id}/delete`, { confirmName: typed.trim() }), e);
+  if (!r) return;
+  announce(`Tenant ${t.name} er slettet`);
+  app.allTenants = await api('GET', '/api/admin/tenants');
+  app.tenants = app.allTenants.filter((x) => app.tenants.some((y) => y.id === x.id));
+  if (app.tenantId === t.id) { app.tenantId = app.tenants[0]?.id || null; await loadTenantData(); }
+  shell();
 }
 
 // ------------------------------------------------------------------ Opstart

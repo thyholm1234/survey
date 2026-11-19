@@ -279,3 +279,61 @@ def test_audit_chain_records_and_detects_tampering(client, org):
     with get_engine().begin() as c:  # migreringsbrugeren kan; api-brugeren kan ikke (DB-grants)
         c.execute(text(f"UPDATE {qualified('qa_audit', 'audit_events')} SET action='tampered' ORDER BY id LIMIT 1"))
     assert audit.verify_chain()["ok"] is False
+
+
+def test_system_admin_deletes_tenant_with_all_data(client, org):
+    import uuid
+
+    from app.db import session_scope
+    from app.models import AccessCode, OrganizationUnit, Response, SurveyVersion, Tenant, User
+
+    t = org["tenant"]
+    insert_responses(t, org["units"]["school"], org["sv"], 5)
+    r = client.post("/api/admin/access-codes", json={"unitId": org["units"]["school"], "surveyVersionId": org["sv"]},
+                    headers=H(org["csrf"]))
+    assert r.status_code == 201
+    # Bruger med roller i en anden tenant skal overleve; org-admin uden andre roller fjernes
+    keep_t = make_tenant(f"Bliver {uuid.uuid4().hex[:6]}")
+    multi = make_admin(f"multi.{uuid.uuid4().hex[:6]}", [{"role_code": "org_admin", "tenant_id": t},
+                                                         {"role_code": "org_admin", "tenant_id": keep_t}])
+    # Org-admin må ikke slette tenants
+    assert client.post(f"/api/admin/tenants/{t}/delete", json={"confirmName": "x"},
+                       headers=H(org["csrf"])).status_code == 403
+
+    sa = make_admin(f"sys.{uuid.uuid4().hex[:6]}", [{"role_code": "system_admin"}])
+    csrf = login(client, sa)
+    with session_scope() as db:
+        name = db.get(Tenant, t).name
+    assert client.post(f"/api/admin/tenants/{t}/delete", json={"confirmName": "forkert"},
+                       headers=H(csrf)).status_code == 422
+    r = client.post(f"/api/admin/tenants/{t}/delete", json={"confirmName": name}, headers=H(csrf))
+    assert r.status_code == 200, r.text
+    assert r.json()["deleted"]["responses"] == 5
+
+    with session_scope() as db:
+        assert db.get(Tenant, t) is None
+        assert db.query(OrganizationUnit).filter_by(tenant_id=t).count() == 0
+        assert db.query(SurveyVersion).filter_by(tenant_id=t).count() == 0
+        assert db.query(Response).filter_by(tenant_id=t).count() == 0
+        assert db.query(AccessCode).filter_by(tenant_id=t).count() == 0
+        assert db.get(User, org["admin"]["id"]) is None
+        assert db.get(User, multi["id"]) is not None
+        assert db.get(Tenant, keep_t) is not None
+    with get_engine().connect() as c:  # auditloggen bevares og registrerer sletningen
+        n = c.execute(text(f"SELECT COUNT(*) FROM {qualified('qa_audit', 'audit_events')} "
+                           "WHERE action='tenant.delete' AND tenant_id=:t"), {"t": t}).scalar()
+    assert n == 1
+    assert client.post(f"/api/admin/tenants/{t}/delete", json={"confirmName": name},
+                       headers=H(csrf)).status_code == 404
+
+
+def test_published_version_still_immutable_without_tenant_purge(client, org):
+    from app.db import session_scope
+    from app.models import Question, SurveyVersion
+
+    with pytest.raises(Exception, match="immutable"):
+        with session_scope() as db:
+            db.query(Question).filter_by(survey_version_id=org["sv"]).delete()
+    with pytest.raises(Exception, match="immutable"):
+        with session_scope() as db:
+            db.query(SurveyVersion).filter_by(id=org["sv"]).delete()

@@ -1,6 +1,7 @@
 """Administrations-CLI.
 
   python -m app.cli create-sysadmin <brugernavn>
+  python -m app.cli reset-password <brugernavn>   # ny engangsadgangskode (skal skiftes ved login)
   python -m app.cli seed-demo            # SYNTETISK demo-tenant med data
   python -m app.cli export-synthetic     # skriver syntetisk long-CSV til stdout
   python -m app.cli verify-audit
@@ -63,6 +64,22 @@ def create_sysadmin(username: str) -> None:
                  details={"role": "system_admin", "via": "cli"})
     print(f"Systemadmin oprettet: {username}\nEngangsadgangskode: {pw}\n"
           "Opsæt TOTP og skift adgangskode ved første login.")
+
+
+def reset_password(username: str) -> None:
+    with session_scope() as db:
+        u = db.scalar(select(User).where(User.username == username))
+        if u is None:
+            sys.exit("Brugeren findes ikke.")
+        pw = secrets.token_urlsafe(18)
+        u.password_hash = argon2_hash(pw)
+        u.must_change_password = True
+        u.failed_logins = 0
+        u.locked_until = None
+        uid = u.id
+    audit.record("user.password_reset", actor_type="system", target_type="user", target_id=uid,
+                 details={"via": "cli"})
+    print(f"Ny engangsadgangskode for {username}: {pw}\nSkal skiftes ved næste login.")
 
 
 def seed_demo() -> None:
@@ -216,6 +233,8 @@ def main(argv: list[str]) -> None:
     cmd = argv[0]
     if cmd == "create-sysadmin" and len(argv) == 2:
         create_sysadmin(argv[1].strip().lower())
+    elif cmd == "reset-password" and len(argv) == 2:
+        reset_password(argv[1].strip().lower())
     elif cmd == "seed-demo":
         seed_demo()
     elif cmd == "export-synthetic":
