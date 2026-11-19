@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/survey/1.0.0",
+  "title": "Psykometrisk spørgeskema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "surveyId", "title", "responseScale", "perspectives", "domains", "items"],
+  "properties": {
+    "schemaVersion": {"type": "string", "const": "1.0.0"},
+    "surveyId": {"$ref": "#/$defs/code64"},
+    "title": {"$ref": "#/$defs/text200"},
+    "language": {"type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$"},
+    "description": {"$ref": "#/$defs/text2000"},
+    "responseScale": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "min", "max"],
+      "properties": {
+        "type": {"type": "string", "enum": ["likert"]},
+        "min": {"type": "integer", "minimum": 0, "maximum": 10},
+        "max": {"type": "integer", "minimum": 1, "maximum": 11},
+        "labels": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "label"],
+            "properties": {
+              "value": {"type": "integer"},
+              "label": {"$ref": "#/$defs/text200"}
+            }
+          }
+        },
+        "cannotAssess": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "label"],
+          "properties": {
+            "code": {"type": "string", "const": "CANNOT_ASSESS"},
+            "label": {"$ref": "#/$defs/text200"}
+          }
+        }
+      }
+    },
+    "perspectives": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "name"],
+        "properties": {
+          "code": {"type": "string", "enum": ["self", "team", "frame", "belong"]},
+          "name": {"$ref": "#/$defs/text200"},
+          "instruction": {"$ref": "#/$defs/text2000"}
+        }
+      }
+    },
+    "fixedLastPerspective": {"type": "string", "enum": ["self", "team", "frame", "belong"]},
+    "domains": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "name"],
+        "properties": {
+          "code": {"type": "string", "pattern": "^[A-Z]{2,6}$"},
+          "name": {"$ref": "#/$defs/text200"}
+        }
+      }
+    },
+    "backgroundVariables": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "label", "options"],
+        "properties": {
+          "code": {"$ref": "#/$defs/code64"},
+          "label": {"$ref": "#/$defs/text200"},
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "label"],
+              "properties": {
+                "code": {"$ref": "#/$defs/code64"},
+                "label": {"$ref": "#/$defs/text200"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "respondentInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "purpose": {"$ref": "#/$defs/text2000"},
+        "voluntary": {"$ref": "#/$defs/text2000"},
+        "dataController": {"$ref": "#/$defs/text2000"},
+        "retention": {"$ref": "#/$defs/text2000"},
+        "contact": {"$ref": "#/$defs/text2000"},
+        "pseudonymity": {"$ref": "#/$defs/text2000"}
+      }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenarioId", "domainCode", "behavior", "questions"],
+        "properties": {
+          "scenarioId": {"$ref": "#/$defs/code64"},
+          "domainCode": {"type": "string", "pattern": "^[A-Z]{2,6}$"},
+          "behavior": {"$ref": "#/$defs/text2000"},
+          "questions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "perspective", "text"],
+              "properties": {
+                "id": {"$ref": "#/$defs/code64"},
+                "perspective": {"type": "string", "enum": ["self", "team", "frame", "belong"]},
+                "text": {"$ref": "#/$defs/text2000"},
+                "reverseScored": {"type": "boolean", "default": false}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "code64": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"},
+    "text200": {"type": "string", "minLength": 1, "maxLength": 200},
+    "text2000": {"type": "string", "minLength": 1, "maxLength": 2000}
+  }
+}

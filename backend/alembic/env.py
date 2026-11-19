@@ -1,0 +1,38 @@
+from logging.config import fileConfig
+
+from alembic import context
+from sqlalchemy import create_engine
+
+from app.db import make_url, schema_map
+from app.models import Base
+
+config = context.config
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+target_metadata = Base.metadata
+
+
+def include_name(name, type_, parent_names):
+    if type_ == "schema":
+        return name in schema_map().values()
+    return True
+
+
+def run_migrations_online() -> None:
+    engine = create_engine(make_url(), pool_pre_ping=True)
+    with engine.connect() as connection:
+        connection = connection.execution_options(schema_translate_map=schema_map())
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_schemas=True,
+            include_name=include_name,
+            version_table_schema=schema_map()["qa_identity"],
+            compare_type=True,
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+run_migrations_online()

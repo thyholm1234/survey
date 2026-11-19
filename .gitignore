@@ -1,0 +1,22 @@
+# Secrets – må aldrig committes
+.env
+.env.*
+!.env.example
+secrets/*
+!secrets/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.hypothesis/
+.venv/
+*.egg-info/
+
+# Output
+exports/
+data/synthetic/*.csv
+!data/synthetic/.gitkeep
+*.log
+.DS_Store
+tests/e2e/node_modules/

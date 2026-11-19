@@ -1,0 +1,9 @@
+.env
+.env.*
+secrets
+.git
+**/__pycache__
+**/.pytest_cache
+**/.hypothesis
+exports
+data/synthetic/*.csv

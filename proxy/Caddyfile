@@ -1,0 +1,76 @@
+{
+	admin off
+	# Skjul serverversion
+	servers {
+		protocols h1 h2
+	}
+}
+
+(security_headers) {
+	header {
+		# Sæt kun hvis upstream (API) ikke allerede har sat dem
+		?Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types 'none'; upgrade-insecure-requests; report-to csp"
+		?Reporting-Endpoints "csp=\"/api/csp-report\""
+		Strict-Transport-Security "max-age={$HSTS_MAX_AGE:300}; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=(), browsing-topics=(), focus-without-user-activation=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Cross-Origin-Embedder-Policy "require-corp"
+		-Server
+		-Via
+	}
+}
+
+{$PUBLIC_HOST:localhost} {
+	import security_headers
+	encode zstd gzip
+
+	# Begræns request-størrelse (JSON-import er den største: 2 MB)
+	request_body {
+		max_size 2MB
+	}
+
+	log {
+		output stdout
+		# Pseudonymisér IP og fjern cookies/autorisation fra adgangsloggen
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip ip_mask 16 32
+				request>client_ip ip_mask 16 32
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>X-Csrf-Token delete
+				resp_headers>Set-Cookie delete
+				request>uri query {
+					delete code
+					delete token
+				}
+			}
+		}
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000 {
+			header_up X-Forwarded-Proto https
+			header_up -X-Forwarded-Host
+			transport http {
+				read_timeout 120s
+			}
+		}
+	}
+
+	handle {
+		root * /srv/www
+		header /js/* Cache-Control "no-cache"
+		header /css/* Cache-Control "no-cache"
+		header /*.html Cache-Control "no-store"
+		try_files {path} {path}/index.html
+		file_server {
+			hide .*
+		}
+	}
+}
