@@ -446,17 +446,26 @@ function unitsTab(panel) {
     if (r) { announce(`${r.name} oprettet`); await loadTenantData(); shell(); }
   });
 
+  const removeBtn = (u) => h('button', { type: 'button', class: 'secondary', text: 'Fjern', 'aria-label': `Fjern ${u.name}`,
+    onclick: async () => {
+      if (!confirm(`Fjern "${u.name}" fra ${u.parentName || 'institutionen'}?\n\n`
+        + 'Indsamlede svar bevares og tælles fremover med under institutionen. '
+        + 'Adgangskoder til afdelingen/klassen deaktiveres, og afdelingsadmin-adgang til den fjernes.')) return;
+      const r = await guard(() => api('POST', `/api/admin/tenants/${app.tenantId}/units/${u.id}/delete`, {}));
+      if (r) { announce(`${u.name} fjernet`); await loadTenantData(); shell(); }
+    } });
   const rows = unitsSorted().map((u) => u.parentId
     ? h('tr', { class: 'child' }, h('th', { scope: 'row' }, h('span', { class: 'indent', 'aria-hidden': 'true', text: '└ ' }), u.name),
-        h('td', { text: 'Afdeling/klasse' }), h('td', { text: UNIT_TYPES[u.unitType] }), h('td', { text: u.status }))
-    : row(u.name, ['Institution', UNIT_TYPES[u.unitType], u.status]));
+        h('td', { text: 'Afdeling/klasse' }), h('td', { text: UNIT_TYPES[u.unitType] }), h('td', { text: u.status }),
+        org ? h('td', {}, removeBtn(u)) : null)
+    : row(u.name, ['Institution', UNIT_TYPES[u.unitType], u.status, ...(org ? [''] : [])]));
   panel.append(heading('units', 'Institutioner og afdelinger'),
     h('p', { class: 'hint', text: 'Opret først institutionen (skole, dagtilbud …) og derefter dens afdelinger eller klasser. '
       + 'Resultater kan ses samlet for institutionen og sammenlignet mellem dens afdelinger/klasser. '
       + 'Adgangskoder kan udstedes til en afdeling/klasse eller til hele institutionen.' }),
     org ? h('section', { class: 'card' }, h('h3', { text: 'Ny institution' }), instForm) : null,
     org && insts.length ? h('section', { class: 'card' }, h('h3', { text: 'Ny afdeling eller klasse' }), subForm) : null,
-    table('Institutioner og afdelinger', ['Navn', 'Niveau', 'Type', 'Status'], rows));
+    table('Institutioner og afdelinger', ['Navn', 'Niveau', 'Type', 'Status', ...(org ? ['Handling'] : [])], rows));
 }
 
 // ------------------------------------------------------------------ Koder

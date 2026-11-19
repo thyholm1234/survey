@@ -8,7 +8,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -224,6 +224,39 @@ def set_unit_status(tenant_id: str, unit_id: str, body: StatusIn, p: Principal =
     audit.record("unit.status", actor_type="user", actor_id=p.id, tenant_id=tenant_id, target_type="unit",
                  target_id=u.id, details={"status": u.status})
     return _unit_out(u)
+
+
+@router.post("/tenants/{tenant_id}/units/{unit_id}/delete")
+def delete_unit(tenant_id: str, unit_id: str, body: EmptyIn, p: Principal = Depends(admin),
+                db: Session = Depends(get_db, scope="function")):
+    """Fjerner en afdeling/klasse. Indsamlede svar bevares og tilskrives institutionen;
+    adgangskoder flyttes til institutionen og deaktiveres; afdelingsadmin-roller på enheden fjernes."""
+    p.require_tenant(tenant_id, org=True)
+    u = db.get(OrganizationUnit, unit_id)
+    if u is None or u.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ikke fundet.")
+    if u.parent_id is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Kun afdelinger/klasser kan fjernes.")
+    parent_id, name = u.parent_id, u.name
+    counts: dict[str, int] = {}
+
+    def run(key: str, stmt) -> None:
+        counts[key] = db.execute(stmt.execution_options(synchronize_session=False)).rowcount or 0
+
+    run("responsesMoved", update(Response).where(Response.unit_id == unit_id).values(unit_id=parent_id))
+    run("accessCodesDisabled", update(AccessCode).where(AccessCode.unit_id == unit_id)
+        .values(unit_id=parent_id, status="disabled"))
+    run("userScopesRemoved", delete(UserScope).where(UserScope.unit_id == unit_id))
+    # Gemte analyser: erstat enhedens id med institutionens, så adgangstjekket stadig virker
+    for r in db.scalars(select(AnalysisRun).where(AnalysisRun.tenant_id == tenant_id)):
+        ids = r.allowed_unit_ids or []
+        if unit_id in ids:
+            r.allowed_unit_ids = sorted({parent_id if i == unit_id else i for i in ids})
+    db.expunge(u)
+    db.execute(delete(OrganizationUnit).where(OrganizationUnit.id == unit_id))
+    audit.record("unit.delete", actor_type="user", actor_id=p.id, tenant_id=tenant_id, target_type="unit",
+                 target_id=unit_id, details={"name": name, "parentId": parent_id, **counts})
+    return {"ok": True, **counts}
 
 
 # ---------------------------------------------------------------------------

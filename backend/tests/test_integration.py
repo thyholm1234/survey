@@ -427,3 +427,31 @@ def test_public_legal_info_has_no_secrets(client):
     body = r.text.lower()
     assert "pepper" not in body and "password" not in body and "key" not in r.json()
     assert {c["name"] for c in r.json()["cookies"]} == {"__Host-qa_resp", "__Host-qa_admin"}
+
+
+def test_delete_subunit_keeps_responses_at_institution(client, org):
+    t, csrf, school = org["tenant"], org["csrf"], org["units"]["school"]
+    a = client.post(f"/api/admin/tenants/{t}/units", json={"name": "9.A", "parentId": school},
+                    headers=H(csrf)).json()["id"]
+    insert_responses(t, a, org["sv"], 12, seed=7)
+    code = client.post("/api/admin/access-codes", json={"unitId": a, "surveyVersionId": org["sv"]},
+                       headers=H(csrf)).json()["codes"][0]["id"]
+    ca = make_admin("unit.9a", [{"role_code": "unit_admin", "tenant_id": t, "unit_id": a}])
+
+    # Institutioner kan ikke fjernes via dette endpoint
+    assert client.post(f"/api/admin/tenants/{t}/units/{school}/delete", json={}, headers=H(csrf)).status_code == 422
+    r = client.post(f"/api/admin/tenants/{t}/units/{a}/delete", json={}, headers=H(csrf))
+    assert r.status_code == 200, r.text
+    assert r.json()["responsesMoved"] == 12 and r.json()["accessCodesDisabled"] == 1
+    assert r.json()["userScopesRemoved"] == 1
+    assert a not in {u["id"] for u in client.get(f"/api/admin/tenants/{t}/units").json()}
+    codes = {c["id"]: c for c in client.get(f"/api/admin/access-codes?tenantId={t}").json()}
+    assert codes[code]["unitId"] == school and codes[code]["status"] == "disabled"
+    d = client.get(f"/api/admin/dashboard?tenantId={t}&surveyVersionId={org['sv']}&unitIds={school}").json()
+    assert d["n"] == 12
+    assert client.post(f"/api/admin/tenants/{t}/units/{a}/delete", json={}, headers=H(csrf)).status_code == 404
+    from app.db import session_scope
+    from app.models import UserScope
+
+    with session_scope() as db:
+        assert db.query(UserScope).filter_by(user_id=ca["id"]).count() == 0
