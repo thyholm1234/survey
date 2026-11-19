@@ -1,6 +1,8 @@
 import { api, ApiError } from './api.js';
 import { h, clear } from './dom.js';
 import { t } from './i18n.js';
+import { icon } from './icons.js';
+import './chrome.js';
 
 const view = document.getElementById('view');
 const main = document.getElementById('main');
@@ -9,7 +11,7 @@ const reminder = document.getElementById('reminder');
 const reminderText = document.getElementById('reminder-text');
 
 const st = {
-  intro: null, ticket: null, responseId: null, data: null,
+  personalKey: null, intro: null, ticket: null, responseId: null, data: null,
   pages: [], pageIdx: 0, maxPageIdx: 0, seq: new Map(), saving: 0,
 };
 
@@ -44,7 +46,7 @@ function codeView(message) {
     enterkeyhint: 'go', 'aria-describedby': 'code-hint code-error',
   });
   input.addEventListener('input', () => { input.setCustomValidity(''); input.removeAttribute('aria-invalid'); err.textContent = ''; });
-  const btn = h('button', { type: 'submit', text: t('codeSubmit') });
+  const btn = h('button', { type: 'submit', class: 'cta-full' }, t('codeSubmit'), icon('arrow-right'));
   const form = h('form', { method: 'post', action: '/', novalidate: true, 'aria-labelledby': 'code-h' },
     h('div', { class: 'field' },
       h('label', { for: 'code', text: t('codeLabel') }), input,
@@ -67,19 +69,32 @@ function codeView(message) {
       input.focus();
     } finally { btn.disabled = false; }
   });
-  const resumeBtn = h('button', { type: 'button', class: 'secondary', text: t('resumeLink'), onclick: () => resumeView() });
-  show(h('section', { class: 'card' }, h('h1', { id: 'code-h', text: t('appTitle') }), form),
-    h('p', {}, resumeBtn));
+  const resumeBtn = h('button', { type: 'button', class: 'link', text: t('resumeLink'), onclick: () => resumeView() });
+  const rightsBtn = h('button', { type: 'button', class: 'link', text: t('rightsLink'), onclick: () => rightsView() });
+  show(h('section', { class: 'hero', 'aria-labelledby': 'code-h' },
+    h('div', { class: 'hero-inner' },
+      h('span', { class: 'badge' }, h('span', { class: 'badge-dot', 'aria-hidden': 'true' }), t('heroBadge')),
+      h('h1', { id: 'code-h', text: t('heroTitle') }),
+      h('p', { class: 'lead', text: t('heroLead') }),
+      h('div', { class: 'card' }, form),
+      h('p', {}, resumeBtn, ' ', rightsBtn))),
+  faqSection());
+}
+
+function faqSection() {
+  return h('section', { class: 'faq', 'aria-labelledby': 'faq-h' },
+    h('h2', { id: 'faq-h', text: t('faqHeading') }),
+    t('faq').map(([q, a]) => h('details', {}, h('summary', {}, q, icon('chevron-down')), h('p', { text: a }))));
 }
 
 function resumeView() {
   const err = errorBox('resume-error');
   const input = h('input', { id: 'resume', name: 'resume', type: 'text', class: 'code', required: true, maxlength: 40,
     autocomplete: 'off', autocapitalize: 'characters', autocorrect: 'off', spellcheck: 'false', 'aria-describedby': 'resume-error' });
-  const btn = h('button', { type: 'submit', text: t('resumeSubmit') });
+  const btn = h('button', { type: 'submit' }, t('resumeSubmit'), icon('arrow-right'));
   const form = h('form', { method: 'post', action: '/', novalidate: true },
     h('div', { class: 'field' }, h('label', { for: 'resume', text: t('resumeLabel') }), input), err,
-    h('div', { class: 'actions' }, h('button', { type: 'button', class: 'secondary', text: t('prev'), onclick: () => codeView() }), btn));
+    h('div', { class: 'actions' }, h('button', { type: 'button', class: 'secondary', onclick: () => codeView() }, icon('arrow-left', 'icon-sm'), t('prev')), btn));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     btn.disabled = true;
@@ -97,10 +112,11 @@ function resumeView() {
 // ---------------------------------------------------------------- Information og samtykke
 function infoView() {
   const i = st.intro;
-  const dl = h('dl', { class: 'info' });
-  for (const key of ['purpose', 'voluntary', 'pseudonymity', 'dataController', 'retention', 'contact']) {
-    if (i.info[key]) dl.append(h('dt', { text: t(key) }), h('dd', { text: i.info[key] }));
-  }
+  const INFO_ICONS = { purpose: 'target', voluntary: 'heart-handshake', pseudonymity: 'shield-check',
+    dataController: 'building-2', retention: 'clock', contact: 'mail' };
+  const dl = h('div', { class: 'info-grid' },
+    Object.keys(INFO_ICONS).filter((key) => i.info[key]).map((key) =>
+      h('article', { class: 'info-card' }, h('h3', {}, icon(INFO_ICONS[key], 'icon-lg'), t(key)), h('p', { text: i.info[key] }))));
   const bgFields = (i.backgroundVariables || []).map((b) => {
     const id = `bg-${b.code}`;
     return h('div', { class: 'field' },
@@ -111,7 +127,7 @@ function infoView() {
   });
   const err = errorBox('consent-error');
   const consent = h('input', { type: 'checkbox', id: 'consent', name: 'consent', required: true, 'aria-describedby': 'consent-error' });
-  const btn = h('button', { type: 'submit', text: t('start') });
+  const btn = h('button', { type: 'submit' }, t('start'), icon('arrow-right'));
   const form = h('form', { method: 'post', action: '/', novalidate: true },
     bgFields.length ? h('fieldset', { class: 'card' }, h('legend', { text: t('backgroundHeading') }), bgFields) : null,
     h('p', {}, consent, ' ', h('label', { for: 'consent', text: t('consent') })), err, btn);
@@ -135,23 +151,29 @@ function infoView() {
       if (ex.status === 400) setTimeout(() => codeView(ex.message), 1500);
     } finally { btn.disabled = false; }
   });
-  show(h('section', { class: 'card' },
+  show(h('section', {},
+    h('div', { class: 'badge-row' }, h('span', { class: 'badge' }, icon('clock', 'icon-sm'), t('estimated', i.questions, i.estimatedMinutes))),
     h('h1', { text: i.title }),
-    h('p', { class: 'lead', text: t('estimated', i.questions, i.estimatedMinutes) }),
-    h('h2', { text: t('infoHeading') }), dl), form);
+    h('h2', { text: t('infoHeading') }), dl,
+    h('p', { class: 'hint' }, t('readMore'), ' ', legalLink('/privatliv/', t('privacy')), ', ', legalLink('/databehandling/', t('processing')),
+      ' og ', legalLink('/cookies/', t('cookies')), '.')), form);
 }
 
 function resumeKeyView(responseId, key) {
-  const copyBtn = h('button', { type: 'button', class: 'secondary', text: t('copy') });
+  const copyBtn = h('button', { type: 'button', class: 'secondary' }, icon('copy', 'icon-sm'), t('copy'));
   copyBtn.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(key); copyBtn.textContent = t('copied'); announce(t('copied')); } catch { /* manuelt */ }
+    try {
+      await navigator.clipboard.writeText(key);
+      copyBtn.replaceChildren(icon('check', 'icon-sm'), t('copied')); announce(t('copied'));
+    } catch { /* manuelt */ }
   });
-  show(h('section', { class: 'card' },
+  show(h('section', { class: 'card center-card' },
+    h('div', { class: 'done-mark' }, icon('key-round')),
     h('h1', { text: t('resumeKeyHeading') }),
     h('p', { text: t('resumeKeyText') }),
     h('p', {}, h('output', { class: 'resume-key', text: key })),
     h('div', { class: 'actions' }, copyBtn,
-      h('button', { type: 'button', text: t('continue'), onclick: () => loadSurvey(responseId) }))));
+      h('button', { type: 'button', onclick: () => { st.personalKey = key; loadSurvey(responseId); } }, t('continue'), icon('arrow-right')))));
 }
 
 // ---------------------------------------------------------------- Besvarelse
@@ -295,9 +317,9 @@ function renderPage() {
   const firstOfBlock = items[0].blockPosition === 0;
   const block = st.data.blocks[bi];
   const revisit = st.pageIdx < st.maxPageIdx;
-  const prev = h('button', { type: 'button', class: 'secondary', text: t('prev'), disabled: st.pageIdx === 0 });
+  const prev = h('button', { type: 'button', class: 'secondary', disabled: st.pageIdx === 0 }, icon('arrow-left', 'icon-sm'), t('prev'));
   prev.addEventListener('click', () => { st.pageIdx -= 1; renderPage(); });
-  const next = h('button', { type: 'submit', text: st.pageIdx === st.pages.length - 1 ? t('finish') : t('next') });
+  const next = h('button', { type: 'submit' }, st.pageIdx === st.pages.length - 1 ? t('finish') : t('next'), icon('arrow-right'));
   const form = h('form', { method: 'post', action: '/', 'aria-labelledby': 'block-h' },
     items.map((o) => itemFieldset(o, revisit)),
     h('div', { class: 'actions' }, prev, next));
@@ -322,7 +344,7 @@ function renderPage() {
 function reviewView() {
   reminder.hidden = true;
   const unanswered = st.data.order.filter((o) => o.value == null && !o.missingCode);
-  const btn = h('button', { type: 'button', text: t('complete') });
+  const btn = h('button', { type: 'button' }, icon('send', 'icon-sm'), t('complete'));
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     try {
@@ -335,23 +357,93 @@ function reviewView() {
       announce(t('genericError'));
     }
   });
-  show(h('section', { class: 'card' },
+  show(h('section', { class: 'card center-card' },
+    h('div', { class: 'done-mark' }, icon('clipboard-list')),
     h('h1', { text: t('reviewHeading') }),
     h('p', { text: t('reviewText', unanswered.length) }),
     h('div', { class: 'actions' },
-      h('button', { type: 'button', class: 'secondary', text: unanswered.length ? t('goFirstUnanswered') : t('prev'),
-        onclick: () => { st.pageIdx = unanswered.length ? pageOf(unanswered[0].position) : st.pages.length - 1; renderPage(); } }),
+      h('button', { type: 'button', class: 'secondary',
+        onclick: () => { st.pageIdx = unanswered.length ? pageOf(unanswered[0].position) : st.pages.length - 1; renderPage(); } },
+      icon('arrow-left', 'icon-sm'), unanswered.length ? t('goFirstUnanswered') : t('prev')),
       btn)));
 }
 
 function doneView() {
   reminder.hidden = true;
   st.data = null;
-  show(h('section', { class: 'card' }, h('h1', { text: t('doneHeading') }), h('p', { text: t('doneText') })));
+  const key = st.personalKey;
+  show(h('section', { class: 'card center-card' }, h('div', { class: 'done-mark' }, icon('circle-check')),
+    h('h1', { text: t('doneHeading') }), h('p', { text: t('doneText') }), h('p', { text: t('doneRights') }),
+    h('div', { class: 'actions' },
+      key ? [
+        h('button', { type: 'button', class: 'secondary', onclick: () => downloadMyData(key) }, icon('download', 'icon-sm'), t('download')),
+        h('button', { type: 'button', class: 'secondary', onclick: () => eraseMyData(key) }, icon('trash-2', 'icon-sm'), t('erase')),
+      ] : h('button', { type: 'button', class: 'secondary', onclick: () => rightsView() }, t('rightsLink')))));
+}
+
+// ---------------------------------------------------------------- Rettigheder (GDPR art. 15, 17, 20)
+function legalLink(href, text, cls) {
+  return h('a', { href, class: cls, target: '_blank', rel: 'noopener noreferrer' }, text, h('span', { class: 'visually-hidden', text: ` ${t('newWindow')}` }));
+}
+
+function confirmDialog(title, text, confirmLabel) {
+  return new Promise((resolve) => {
+    const dlg = h('dialog', { 'aria-labelledby': 'dlg-h' },
+      h('h2', { id: 'dlg-h', text: title }), h('p', { text }),
+      h('div', { class: 'actions' },
+        h('button', { type: 'button', class: 'secondary', onclick: () => dlg.close('no') }, t('cancel')),
+        h('button', { type: 'button', class: 'danger', onclick: () => dlg.close('yes') }, icon('trash-2', 'icon-sm'), confirmLabel)));
+    dlg.addEventListener('close', () => { resolve(dlg.returnValue === 'yes'); dlg.remove(); });
+    document.body.append(dlg);
+    dlg.showModal();
+  });
+}
+
+async function downloadMyData(key, errEl) {
+  try {
+    const d = await api('POST', '/api/respondent/rights/export', { key });
+    const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: 'mine-svar.json' });
+    document.body.append(a); a.click(); a.remove();
+    announce(t('downloaded'));
+  } catch (ex) {
+    if (errEl) errEl.textContent = ex.message || t('genericError'); else announce(ex.message || t('genericError'));
+  }
+}
+
+async function eraseMyData(key, errEl) {
+  if (!(await confirmDialog(t('eraseConfirmTitle'), t('eraseConfirmText'), t('eraseConfirm')))) return;
+  try {
+    await api('POST', '/api/respondent/rights/erase', { key });
+    st.personalKey = null; st.data = null; reminder.hidden = true;
+    show(h('section', { class: 'card center-card' }, h('div', { class: 'done-mark' }, icon('circle-check')),
+      h('h1', { text: t('erasedHeading') }), h('p', { text: t('erasedText') })));
+  } catch (ex) {
+    if (errEl) errEl.textContent = ex.message || t('genericError'); else announce(ex.message || t('genericError'));
+  }
+}
+
+function rightsView() {
+  reminder.hidden = true;
+  const err = errorBox('rights-error');
+  const input = h('input', { id: 'rights-key', name: 'key', type: 'text', class: 'code', required: true, maxlength: 40,
+    autocomplete: 'off', autocapitalize: 'characters', autocorrect: 'off', spellcheck: 'false', 'aria-describedby': 'rights-error' });
+  const need = () => { if (!input.value.trim()) { input.setAttribute('aria-invalid', 'true'); err.textContent = t('rightsKeyRequired'); input.focus(); return false; } return true; };
+  input.addEventListener('input', () => { input.removeAttribute('aria-invalid'); err.textContent = ''; });
+  const form = h('form', { method: 'post', action: '/', novalidate: true },
+    h('div', { class: 'field' }, h('label', { for: 'rights-key', text: t('rightsKeyLabel') }), input), err,
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'secondary', onclick: () => codeView() }, icon('arrow-left', 'icon-sm'), t('prev')),
+      h('button', { type: 'button', class: 'secondary', onclick: () => need() && downloadMyData(input.value, err) }, icon('download', 'icon-sm'), t('download')),
+      h('button', { type: 'button', class: 'danger', onclick: () => need() && eraseMyData(input.value, err) }, icon('trash-2', 'icon-sm'), t('erase'))));
+  form.addEventListener('submit', (e) => e.preventDefault());
+  show(h('section', { class: 'card' }, h('h1', { text: t('rightsHeading') }), h('p', { text: t('rightsIntro') }), form,
+    h('p', { class: 'hint' }, legalLink('/privatliv/', t('privacy'), 'standalone-link'))));
 }
 
 // ---------------------------------------------------------------- Opstart
 (async () => {
+  if (location.hash === '#rettigheder') return rightsView();
   try {
     const s = await api('GET', '/api/respondent/session');
     await loadSurvey(s.responseId);

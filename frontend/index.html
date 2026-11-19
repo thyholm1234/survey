@@ -7,16 +7,34 @@
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex, nofollow">
   <title>Spørgeskema</title>
+  <link rel="icon" href="data:,">
+  <link rel="preload" href="/fonts/playfair-display-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/css/app.css">
   <script type="module" src="/js/respondent.js"></script>
 </head>
 <body>
   <a class="skip" href="#main">Spring til indhold</a>
-  <div id="reminder" class="block-reminder" hidden><p id="reminder-text"></p></div>
+  <div class="topbar">
+    <header class="site">
+      <div class="wrap">
+        <span class="brand">
+          <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg></span>
+          Spørgeskema
+        </span>
+      </div>
+    </header>
+    <div id="reminder" class="block-reminder" hidden><p id="reminder-text"></p></div>
+  </div>
   <main id="main" class="wrap" tabindex="-1">
     <noscript><p class="notice">Spørgeskemaet kræver JavaScript.</p></noscript>
     <div id="view"></div>
   </main>
+  <footer class="site-foot">
+    <div class="wrap">
+      <p>Deltagelse er frivillig. Du kan stoppe når som helst.</p>
+      <nav class="foot-links" aria-label="Juridisk information"><a href="/privatliv/">Privatliv</a> <a href="/databehandling/">Databehandling</a> <a href="/cookies/">Cookies</a> <a href="/#rettigheder">Dine rettigheder</a></nav>
+    </div>
+  </footer>
   <div id="status" class="visually-hidden" role="status" aria-live="polite"></div>
 </body>
 </html>

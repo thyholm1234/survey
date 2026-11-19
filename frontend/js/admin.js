@@ -1,5 +1,7 @@
 import { api, setCsrf } from './api.js';
 import { h, s, clear, fmt } from './dom.js';
+import { icon } from './icons.js';
+import './chrome.js';
 
 const view = document.getElementById('view');
 const userbox = document.getElementById('userbox');
@@ -12,6 +14,22 @@ const UNIT_TYPES = { daycare: 'Dagtilbud', school: 'Skole', other: 'Andet' };
 function announce(m) { statusEl.textContent = ''; requestAnimationFrame(() => { statusEl.textContent = m; }); }
 function focusHeading() { const hd = view.querySelector('h2'); if (hd) { hd.tabIndex = -1; hd.focus(); } }
 function err(id) { return h('p', { id, class: 'error', role: 'alert' }); }
+/** Midtstillet auth-visning (login, MFA, adgangskode) i samme hero-stil som respondentsiden. */
+function authShell({ badgeIcon = 'lock', badge = 'Kun for administratorer', title, lead }, ...nodes) {
+  return h('section', { class: 'hero', 'aria-labelledby': 'auth-h' }, h('div', { class: 'hero-inner' },
+    h('span', { class: 'badge' }, icon(badgeIcon, 'icon-sm'), badge),
+    h('h2', { id: 'auth-h', text: title }),
+    lead ? h('p', { class: 'lead', text: lead }) : null,
+    h('div', { class: 'card' }, ...nodes)));
+}
+const TAB_ICONS = { dashboard: 'layout-dashboard', surveys: 'clipboard-list', units: 'building-2', codes: 'key-round',
+  analyses: 'flask-conical', exports: 'download', users: 'users', audit: 'scroll-text', tenants: 'landmark' };
+const TINTS = ['a', 'b', 'c'];
+function tabIcon(key, i = 0) { return h('span', { class: `icon-box ${TINTS[i % TINTS.length]}` }, icon(TAB_ICONS[key])); }
+/** Sidehoved for en fane: farvet ikonboks + serif h2. */
+function heading(key, text) {
+  return h('div', { class: 'panel-head' }, tabIcon(key, Object.keys(TAB_ICONS).indexOf(key)), h('h2', { text }));
+}
 function field(label, input, hint) {
   const id = input.id || `f-${Math.random().toString(36).slice(2)}`;
   input.id = id;
@@ -40,7 +58,7 @@ function loginView(message) {
   if (message) e.textContent = message;
   const u = h('input', { name: 'username', type: 'text', autocomplete: 'username', required: true, autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false' });
   const p = h('input', { name: 'password', type: 'password', autocomplete: 'current-password', required: true });
-  const btn = h('button', { type: 'submit', text: 'Log ind' });
+  const btn = h('button', { type: 'submit', class: 'cta-full' }, 'Log ind', icon('arrow-right'));
   const form = h('form', { method: 'post', action: '/admin/' }, field('Brugernavn', u), field('Adgangskode', p), e, btn);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault(); btn.disabled = true;
@@ -52,13 +70,13 @@ function loginView(message) {
     }, e);
     btn.disabled = false;
   });
-  clear(view).append(h('section', { class: 'card' }, h('h2', { text: 'Log ind' }), form));
+  clear(view).append(authShell({ title: 'Log ind', lead: 'Administration af spørgeskemaer, adgangskoder og resultater.' }, form));
   focusHeading();
 }
 
 async function mfaView(enroll) {
   const e = err('mfa-err');
-  const parts = [h('h2', { text: enroll ? 'Opsæt to-faktor-godkendelse' : 'To-faktor-godkendelse' })];
+  const parts = [];
   if (enroll) {
     const setup = await guard(() => api('POST', '/api/admin/auth/mfa/setup', {}), e);
     if (!setup) return;
@@ -67,7 +85,7 @@ async function mfaView(enroll) {
       h('p', {}, 'Nøgle: ', h('code', { text: setup.secret })));
   }
   const c = h('input', { name: 'code', type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', pattern: '\\d{6}', maxlength: 6, required: true });
-  const btn = h('button', { type: 'submit', text: 'Bekræft' });
+  const btn = h('button', { type: 'submit', class: 'cta-full' }, 'Bekræft', icon('shield-check'));
   const form = h('form', { method: 'post', action: '/admin/' }, field('6-cifret kode', c), e, btn);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault(); btn.disabled = true;
@@ -78,7 +96,8 @@ async function mfaView(enroll) {
     }, e);
     btn.disabled = false;
   });
-  clear(view).append(h('section', { class: 'card' }, ...parts, form));
+  clear(view).append(authShell({ badgeIcon: 'shield-check', badge: 'Ekstra sikkerhed',
+    title: enroll ? 'Opsæt to-faktor-godkendelse' : 'To-faktor-godkendelse' }, ...parts, form));
   focusHeading();
 }
 
@@ -86,7 +105,7 @@ function passwordView() {
   const e = err('pw-err');
   const cur = h('input', { type: 'password', autocomplete: 'current-password', required: true });
   const nw = h('input', { type: 'password', autocomplete: 'new-password', minlength: 14, required: true, 'aria-describedby': 'pw-hint' });
-  const btn = h('button', { type: 'submit', text: 'Skift adgangskode' });
+  const btn = h('button', { type: 'submit', class: 'cta-full' }, 'Skift adgangskode', icon('key-round'));
   const form = h('form', { method: 'post', action: '/admin/' }, field('Nuværende adgangskode', cur),
     h('div', { class: 'field' }, h('label', { for: 'nw', text: 'Ny adgangskode' }), Object.assign(nw, { id: 'nw' }),
       h('span', { id: 'pw-hint', class: 'hint', text: 'Mindst 14 tegn. Brug gerne en lang sætning.' })), e, btn);
@@ -95,7 +114,7 @@ function passwordView() {
     await guard(async () => { await api('POST', '/api/admin/auth/password', { current: cur.value, new: nw.value }); boot(); }, e);
     btn.disabled = false;
   });
-  clear(view).append(h('section', { class: 'card' }, h('h2', { text: 'Skift adgangskode' }), form));
+  clear(view).append(authShell({ badgeIcon: 'key-round', badge: 'Første login', title: 'Skift adgangskode' }, form));
   focusHeading();
 }
 
@@ -146,7 +165,7 @@ function isOrgAdmin() { return app.who?.orgTenants?.includes(app.tenantId); }
 
 function shell() {
   clear(userbox).append(h('span', { class: 'muted', text: `${app.who.username} ` }),
-    h('button', { type: 'button', class: 'secondary', text: 'Log ud', onclick: logout }));
+    h('button', { type: 'button', class: 'secondary', onclick: logout }, icon('log-out', 'icon-sm'), 'Log ud'));
   const tabs = TABS.filter(([k]) => {
     if (k === 'tenants') return app.who.systemAdmin;
     if (['surveys', 'units', 'users'].includes(k)) return isOrgAdmin();
@@ -157,8 +176,9 @@ function shell() {
   const tenantSel = app.tenants.length > 1 ? field('Organisation', h('select', { id: 'tenant-sel', onchange: async (e) => {
     app.tenantId = e.target.value; await loadTenantData(); shell(); } }, app.tenants.map((t) =>
     h('option', { value: t.id, text: t.name, selected: t.id === app.tenantId })))) : null;
-  const nav = h('nav', { class: 'tabs', 'aria-label': 'Sektioner' }, tabs.map(([k, label]) =>
-    h('button', { type: 'button', text: label, 'aria-current': k === app.tab ? 'page' : null, onclick: () => { app.tab = k; shell(); } })));
+  const nav = h('nav', { class: 'tabs', 'aria-label': 'Sektioner' }, tabs.map(([k, label], i) =>
+    h('button', { type: 'button', 'aria-current': k === app.tab ? 'page' : null, onclick: () => { app.tab = k; shell(); } },
+      tabIcon(k, i), label)));
   const panel = h('div', { id: 'panel' });
   clear(view).append(h('div', { class: 'filters' }, tenantSel), nav, panel);
   ({ dashboard: dashboardTab, surveys: surveysTab, units: unitsTab, codes: codesTab, analyses: analysesTab,
@@ -228,7 +248,7 @@ function hideTip() { tooltip.hidden = true; }
 
 /** Punkt + 95 %-CI pr. kategori; én række pr. kategori, evt. to serier (dagtilbud/skole). */
 function ciChart(rows, { min = 1, max = 6, series = null, title }) {
-  const W = 640; const left = 190; const right = 24; const rowH = series ? 44 : 34; const top = 24;
+  const W = 760; const left = 300; const right = 24; const rowH = series ? 44 : 34; const top = 24;
   const H = top + rows.length * rowH + 28;
   const x = (v) => left + ((v - min) / (max - min)) * (W - left - right);
   const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title });
@@ -246,11 +266,14 @@ function ciChart(rows, { min = 1, max = 6, series = null, title }) {
       if (d.ci95) svg.append(s('line', { class: `ci ${cls}`, x1: x(d.ci95[0]), x2: x(d.ci95[1]), y1: y, y2: y }));
       const tip = `${r.label}${series ? ` · ${k === 'daycare' ? 'Dagtilbud' : 'Skole'}` : ''}: middel ${fmt(d.mean)}` +
         (d.ci95 ? ` [${fmt(d.ci95[0])}; ${fmt(d.ci95[1])}]` : '') + `, n=${d.nValid}`;
-      const hit = s('circle', { class: 'hit', cx: x(d.mean), cy: y, r: 12, tabindex: 0, 'aria-label': tip });
+      const hit = s('circle', { class: 'hit', cx: x(d.mean), cy: y, r: 12, tabindex: 0, role: 'img', 'aria-label': tip });
       hit.addEventListener('pointerenter', (e) => showTip(e, tip));
       hit.addEventListener('focus', (e) => showTip(e, tip));
       hit.addEventListener('pointerleave', hideTip); hit.addEventListener('blur', hideTip);
-      svg.append(hit, s('circle', { class: `dot ${cls}`, cx: x(d.mean), cy: y, r: 5 }));
+      // Serier skelnes på form (cirkel/firkant) – ikke kun farve (WCAG 1.4.1)
+      svg.append(hit, k === 'school'
+        ? s('rect', { class: `dot ${cls}`, x: x(d.mean) - 5, y: y - 5, width: 10, height: 10, rx: 2 })
+        : s('circle', { class: `dot ${cls}`, cx: x(d.mean), cy: y, r: 5 }));
     }
   });
   return h('figure', { class: 'chart' }, svg);
@@ -265,7 +288,7 @@ function heatColor(v, min = 1, max = 6) {
 function dashboardTab(panel) {
   const out = h('div');
   const e = err('dash-err');
-  panel.append(h('h2', { text: 'Resultater' }),
+  panel.append(heading('dashboard', 'Resultater'),
     h('p', { class: 'hint', text: 'Aggregerede, beskrivende resultater. Ingen individuelle profiler eller ranglister. Små celler undertrykkes.' }),
     publishedVersions().length ? filterForm(async (f, thr) => {
       const q = filtersToQuery(f); q.set('subscaleThreshold', String(thr));
@@ -279,7 +302,9 @@ function renderDashboard(out, d) {
   if (d.suppressed) { out.append(h('p', { class: 'notice', text: d.reason })); return; }
   const sub = Object.fromEntries(d.subscales.map((x) => [x.code, x.name]));
   const dom = Object.fromEntries(d.domains.map((x) => [x.code, x.name]));
-  out.append(h('p', { class: 'lead', text: `N = ${d.n} besvarelser · minimum cellestørrelse ${d.minCellSize}` }));
+  out.append(h('div', { class: 'stats', role: 'group', 'aria-label': 'Nøgletal' },
+    [[d.n, 'besvarelser'], [d.minCellSize, 'minimum cellestørrelse'], [d.domains.length, 'domæner'], [d.subscales.length, 'perspektiver']]
+      .map(([v, l]) => h('div', { class: 'stat' }, h('b', { text: String(v) }), h('span', { text: l })))));
 
   // 1. Profil
   out.append(h('section', { class: 'card' }, h('h3', { text: '1. Subskalaprofil (middel og 95 % CI)' }),
@@ -364,7 +389,7 @@ function surveysTab(panel) {
     const r = await guard(() => api('POST', '/api/admin/surveys/import', { tenantId: app.tenantId, document: doc, dryRun: true }), e);
     if (r) renderPreview(result, r, doc);
   });
-  panel.append(h('h2', { text: 'Spørgeskemaer' }), h('section', { class: 'card' }, h('h3', { text: 'Importér' }), form, result),
+  panel.append(heading('surveys', 'Spørgeskemaer'), h('section', { class: 'card' }, h('h3', { text: 'Importér' }), form, result),
     h('section', { class: 'card' }, h('h3', { text: 'Versioner' }), table('Versioner', ['Spørgeskema', 'Version', 'Status', 'Importeret', 'SHA-256', ''],
       app.surveys.flatMap((sv) => sv.versions.map((v) => row(`${sv.title} (${sv.surveyId})`, [String(v.versionNo), v.status,
         new Date(v.importedAt).toLocaleString('da-DK'), v.sha256.slice(0, 12) + '…',
@@ -425,7 +450,7 @@ function unitsTab(panel) {
     ? h('tr', { class: 'child' }, h('th', { scope: 'row' }, h('span', { class: 'indent', 'aria-hidden': 'true', text: '└ ' }), u.name),
         h('td', { text: 'Afdeling/klasse' }), h('td', { text: UNIT_TYPES[u.unitType] }), h('td', { text: u.status }))
     : row(u.name, ['Institution', UNIT_TYPES[u.unitType], u.status]));
-  panel.append(h('h2', { text: 'Institutioner og afdelinger' }),
+  panel.append(heading('units', 'Institutioner og afdelinger'),
     h('p', { class: 'hint', text: 'Opret først institutionen (skole, dagtilbud …) og derefter dens afdelinger eller klasser. '
       + 'Resultater kan ses samlet for institutionen og sammenlignet mellem dens afdelinger/klasser. '
       + 'Adgangskoder kan udstedes til en afdeling/klasse eller til hele institutionen.' }),
@@ -459,7 +484,7 @@ async function codesTab(panel) {
     if (!r) return;
     clear(result).append(h('p', { class: 'notice', text: r.notice }),
       h('pre', { class: 'json', text: r.codes.map((c) => c.code).join('\n') }),
-      h('button', { type: 'button', class: 'secondary', text: 'Kopiér alle', onclick: () => navigator.clipboard.writeText(r.codes.map((c) => c.code).join('\n')) }));
+      h('button', { type: 'button', class: 'secondary', onclick: () => navigator.clipboard.writeText(r.codes.map((c) => c.code).join('\n')) }, icon('copy', 'icon-sm'), 'Kopiér alle'));
     refresh();
   });
   const list = h('div');
@@ -473,7 +498,7 @@ async function codesTab(panel) {
         h('td', {}, c.status === 'active' ? h('button', { type: 'button', class: 'secondary', text: 'Deaktivér', onclick: async () => {
           await guard(() => api('POST', `/api/admin/access-codes/${c.id}/disable`, {})); refresh(); } }) : '')]))));
   };
-  panel.append(h('h2', { text: 'Adgangskoder' }), h('section', { class: 'card' }, form, result), list);
+  panel.append(heading('codes', 'Adgangskoder'), h('section', { class: 'card' }, form, result), list);
   refresh();
 }
 
@@ -485,7 +510,7 @@ function analysesTab(panel) {
     ['screening', 'Datascreening (hurtige svar, straightlining)']].map(([k, v]) => h('option', { value: k, text: v })));
   const list = h('div');
   const detail = h('div');
-  panel.append(h('h2', { text: 'Analyser' }), h('section', { class: 'card' }, field('Analyse', kind),
+  panel.append(heading('analyses', 'Analyser'), h('section', { class: 'card' }, field('Analyse', kind),
     publishedVersions().length ? filterForm(async (f, thr) => {
       const params = kind.value === 'group_comparison' ? { covariates: ['profession', 'experience'], subscaleThreshold: thr }
         : kind.value === 'reliability' ? { bootstrap: 1000 } : { subscaleThreshold: thr };
@@ -567,7 +592,7 @@ function exportsTab(panel) {
   const fmtSel = h('select', { id: 'ex-fmt' }, [['report_html', 'Rapport (HTML)'], ['long_csv', 'CSV – long (én række pr. svar)'],
     ['wide_csv', 'CSV – wide (én række pr. besvarelse)'], ['codebook_json', 'Kodebog (JSON)'], ['protocol_json', 'Analyseprotokol (JSON)']]
     .map(([k, v]) => h('option', { value: k, text: v })));
-  panel.append(h('h2', { text: 'Eksport' }),
+  panel.append(heading('exports', 'Eksport'),
     h('p', { class: 'hint', text: 'Kræver eksportrettighed. Eksporter indeholder aldrig adgangskoder eller direkte identifikatorer. Alle eksporter auditeres.' }),
     h('section', { class: 'card' }, field('Format', fmtSel), publishedVersions().length ? filterForm(async (f) => {
       await guard(async () => {
@@ -603,7 +628,7 @@ async function usersTab(panel) {
     if (users) clear(list).append(table('Brugere', ['Brugernavn', 'Roller', 'MFA', 'Status'], users.map((u) => row(u.username,
       [u.scopes.map((x) => x.role + (x.canExport ? ' (eksport)' : '')).join(', '), u.mfaEnrolled ? 'ja' : 'nej', u.status]))));
   };
-  panel.append(h('h2', { text: 'Brugere' }), h('section', { class: 'card' }, form, result), list);
+  panel.append(heading('users', 'Brugere'), h('section', { class: 'card' }, form, result), list);
   load();
 }
 
@@ -618,7 +643,7 @@ async function auditTab(panel) {
     } }));
   }
   const ev = await guard(() => api('GET', `/api/admin/audit${q}`)) || [];
-  panel.append(h('h2', { text: 'Auditlog' }), verify, table('Seneste hændelser', ['Tid', 'Handling', 'Aktør', 'Mål', 'Detaljer'],
+  panel.append(heading('audit', 'Auditlog'), verify, table('Seneste hændelser', ['Tid', 'Handling', 'Aktør', 'Mål', 'Detaljer'],
     ev.map((x) => row(new Date(x.at).toLocaleString('da-DK'), [x.action, `${x.actorType}${x.actorId ? ' ' + x.actorId.slice(0, 8) : ''}`,
       x.targetType ? `${x.targetType} ${String(x.targetId || '').slice(0, 8)}` : '', JSON.stringify(x.details).slice(0, 120)]))));
 }
@@ -646,11 +671,11 @@ async function tenantsTab(panel) {
       shell();
     }, e);
   });
-  panel.append(h('h2', { text: 'Tenants' }),
+  panel.append(heading('tenants', 'Tenants'),
     h('p', { class: 'hint', text: 'Systemadministratorer kan ikke som standard se besvarelser.' }),
     h('section', { class: 'card' }, form, result),
     table('Tenants', ['Navn', 'Min. celle', 'Opbevaring (mdr.)', 'Status', 'Handling'], app.allTenants.map((t) => row(t.name, [t.minCellSize, t.retentionMonths, t.status,
-      h('td', {}, h('button', { type: 'button', class: 'secondary', text: 'Slet', 'aria-label': `Slet tenant ${t.name}`, onclick: () => deleteTenant(t, e) }))]))));
+      h('td', {}, h('button', { type: 'button', class: 'secondary', 'aria-label': `Slet tenant ${t.name}`, onclick: () => deleteTenant(t, e) }, icon('trash-2', 'icon-sm'), 'Slet'))]))));
 }
 
 async function deleteTenant(t, e) {
