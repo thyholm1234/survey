@@ -33,6 +33,8 @@ kompromitteret API-proces · kompromitteret worker · ondsindet administrator i 
 | I7 | Data-at-rest / backup-tyveri | MariaDB `file_key_management` med krypteret nøglefil, `innodb_encrypt_tables=FORCE`, krypteret redo-log, temp og binlog. Nøgler skal i produktion ligge i managed secrets/KMS. |
 | I8 | Netværksaflytning | TLS i ekstern reverse proxy; HSTS sat af appen; api publiceret kun på 127.0.0.1 som standard; DB på `internal: true`-netværk uden publiceret port. |
 | D1 | Overbelastning | Request-størrelse 2 MB (app; bør også håndhæves i reverse proxy); uvicorn `--limit-concurrency`; Argon2id-omkostning begrænset af rate limits; analyser kører asynkront i worker. |
+| R2 | Brute force af personlig kode (rettighedsendpoints) | Samme krav som genoptagelse: 19 tegn, Argon2id + peppered HMAC-opslag, rate limit pr. pseudonymiseret IP (`rights`-bucket), generisk fejl. Kode bevares efter afslutning (udløber med retention) for at kunne udøve art. 15/17/20 uden identifikation (art. 11). Besiddelse af koden = ret til at slette/eksportere den ene besvarelse (ikke andres). |
+| D2 | Kapløb mellem commit og næste request | `get_db` afsluttes FØR svaret sendes (`scope="function"`, FastAPI ≥ 0.118); `tests/test_architecture.py` fejler, hvis en rute glemmer det. Opdaget ved smoke-test efter opgradering. |
 | E1 | Privilegieeskalering via brugeroprettelse | Kun systemadmin kan oprette systemadmins; org-admin kun i egen tenant; afdelingsadmin kan ikke oprette brugere. |
 | E2 | Container-udbrud | Ikke-root brugere, `read_only`, `cap_drop: ALL`, `no-new-privileges`, hash-pinnede Python-afhængigheder (`--require-hashes`). |
 
@@ -43,4 +45,6 @@ kompromitteret API-proces · kompromitteret worker · ondsindet administrator i 
   svar kommer ind) er kun delvist afbødet af komplementreglen.
 - Tidsstempler og svartider i rækkeeksport er kvasi-identifikatorer; eksport bør begrænses til
   analytikere med dokumenteret formål.
-- Manuel skærmlæsertest, penetrationstest og DPIA mangler.
+- Manuel skærmlæsertest og ekstern penetrationstest mangler. DPIA-skabelon, ROPA, DPA-skabelon og brudprocedure findes i `docs/compliance/` og skal godkendes af den dataansvarlige.
+- Auditlog har ingen sletteregel (se `docs/compliance/retention-and-deletion.md`).
+- Central overvågning/alarmer og SSO/OIDC for administratorer mangler.

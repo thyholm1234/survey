@@ -380,3 +380,50 @@ def test_institution_hierarchy_and_dashboard_levels(client, org):
     assert {u["id"] for u in client.get(f"/api/admin/tenants/{t}/units").json()} == {a}
     d = client.get(f"/api/admin/dashboard?tenantId={t}&surveyVersionId={org['sv']}&unitIds={school}").json()
     assert d["n"] == 12
+
+
+def test_data_subject_rights_export_and_erase(client, org):
+    """GDPR art. 15/17/20: den personlige kode virker også efter afslutning og kan slette alt."""
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    code = make_code(client, org)
+    with TestClient(create_app(), base_url="https://testserver") as rc:
+        start = respondent_start(rc, code)
+        rid, key = start["responseId"], start["resumeKey"]
+        order = rc.get(f"/api/respondent/sessions/{rid}/next").json()["order"]
+        q = order[0]["questionId"]
+        rc.post(f"/api/respondent/sessions/{rid}/shown", json={"positions": [0, 1]})
+        rc.put(f"/api/respondent/sessions/{rid}/answers/{q}", json={"value": 4, "seq": 1})
+        assert rc.post(f"/api/respondent/sessions/{rid}/complete", json={}).status_code == 200
+
+    with TestClient(create_app(), base_url="https://testserver") as other:  # ingen session/cookie
+        # forkert kode afvises generisk
+        assert other.post("/api/respondent/rights/export", json={"key": "WRONG-WRONG-WRONG"}).status_code == 400
+        # afsluttet besvarelse kan ikke genoptages, men kan eksporteres
+        assert other.post("/api/respondent/resume", json={"resumeKey": key}).status_code == 400
+        r = other.post("/api/respondent/rights/export", json={"key": key})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["responseId"] == rid and d["status"] == "completed"
+        assert [a["value"] for a in d["answers"]] == [4, None]  # besvaret + vist-men-ubesvaret
+        assert not any(k in d for k in ("ip", "email", "name", "seed"))
+        # sletning fjerner besvarelsen og koden
+        assert other.post("/api/respondent/rights/erase", json={"key": key}).json() == {"erased": True}
+        assert other.post("/api/respondent/rights/export", json={"key": key}).status_code == 400
+
+    with get_engine().connect() as c:
+        n = c.execute(text(f"SELECT COUNT(*) FROM {qualified('qa_data', 'responses')} WHERE id=:r"), {"r": rid}).scalar()
+        a = c.execute(text(f"SELECT COUNT(*) FROM {qualified('qa_data', 'answers')} WHERE response_id=:r"), {"r": rid}).scalar()
+        ev = c.execute(text(f"SELECT COUNT(*) FROM {qualified('qa_audit', 'audit_events')} WHERE action='respondent.erased' "
+                            "AND target_id=:r"), {"r": rid}).scalar()
+    assert n == 0 and a == 0 and ev == 1
+
+
+def test_public_legal_info_has_no_secrets(client):
+    r = client.get("/api/public/legal-info")
+    assert r.status_code == 200
+    body = r.text.lower()
+    assert "pepper" not in body and "password" not in body and "key" not in r.json()
+    assert {c["name"] for c in r.json()["cookies"]} == {"__Host-qa_resp", "__Host-qa_admin"}

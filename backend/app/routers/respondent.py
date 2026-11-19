@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from .. import ratelimit
+from .. import audit, ratelimit
 from ..config import get_settings
 from ..db import get_db
 from ..deps import RESP_COOKIE, clear_cookie, respondent, set_cookie
@@ -133,7 +133,7 @@ def _intro(sv: SurveyVersion, tenant: Tenant, db: Session) -> dict:
 
 
 @router.post("/access-code/verify")
-def verify_code(body: CodeIn, request: Request, db: Session = Depends(get_db)):
+def verify_code(body: CodeIn, request: Request, db: Session = Depends(get_db, scope="function")):
     s = get_settings()
     bucket = ratelimit.bucket_for(request, "code")
     ratelimit.check_blocked(bucket, s.rl_code_attempts)
@@ -177,7 +177,7 @@ def _new_session(db: Session, response: Response, response_id: str, code_id: str
 
 
 @router.post("/sessions", status_code=201)
-def start_session(body: StartIn, request: Request, response: Response, db: Session = Depends(get_db)):
+def start_session(body: StartIn, request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
     s = get_settings()
     ticket = db.get(CodeTicket, token_digest(body.ticket), with_for_update=True)
     if ticket is None or ticket.used or ticket.expires_at <= utcnow():
@@ -246,7 +246,7 @@ def start_session(body: StartIn, request: Request, response: Response, db: Sessi
 
 
 @router.post("/resume")
-def resume(body: ResumeIn, request: Request, response: Response, db: Session = Depends(get_db)):
+def resume(body: ResumeIn, request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
     s = get_settings()
     bucket = ratelimit.bucket_for(request, "resume")
     ratelimit.check_blocked(bucket, s.rl_code_attempts)
@@ -279,7 +279,7 @@ def _own(sess: ResponseSession, response_id: str, db: Session, lock: bool = Fals
 
 
 @router.get("/sessions/{response_id}/next")
-def next_state(response_id: str, sess: ResponseSession = Depends(respondent), db: Session = Depends(get_db)):
+def next_state(response_id: str, sess: ResponseSession = Depends(respondent), db: Session = Depends(get_db, scope="function")):
     resp = _own(sess, response_id, db)
     sv = db.get(SurveyVersion, resp.survey_version_id)
     doc = json.loads(sv.source_json)
@@ -335,7 +335,7 @@ def next_state(response_id: str, sess: ResponseSession = Depends(respondent), db
 
 @router.post("/sessions/{response_id}/shown", status_code=204)
 def shown(response_id: str, body: ShownIn, sess: ResponseSession = Depends(respondent),
-          db: Session = Depends(get_db)):
+          db: Session = Depends(get_db, scope="function")):
     resp = _own(sess, response_id, db, lock=True)
     if resp.status != "in_progress":
         raise HTTPException(status.HTTP_409_CONFLICT, "Besvarelsen er afsluttet.")
@@ -369,7 +369,7 @@ def shown(response_id: str, body: ShownIn, sess: ResponseSession = Depends(respo
 
 @router.put("/sessions/{response_id}/answers/{question_key}")
 def put_answer(response_id: str, question_key: str, body: AnswerIn,
-               sess: ResponseSession = Depends(respondent), db: Session = Depends(get_db)):
+               sess: ResponseSession = Depends(respondent), db: Session = Depends(get_db, scope="function")):
     resp = _own(sess, response_id, db, lock=True)
     if resp.status != "in_progress":
         raise HTTPException(status.HTTP_409_CONFLICT, "Besvarelsen er afsluttet.")
@@ -413,7 +413,7 @@ def put_answer(response_id: str, question_key: str, body: AnswerIn,
 
 @router.post("/sessions/{response_id}/complete")
 def complete(response_id: str, response: Response, sess: ResponseSession = Depends(respondent),
-             db: Session = Depends(get_db)):
+             db: Session = Depends(get_db, scope="function")):
     resp = _own(sess, response_id, db, lock=True)
     if resp.status == "completed":
         clear_cookie(response, RESP_COOKIE)
@@ -426,8 +426,78 @@ def complete(response_id: str, response: Response, sess: ResponseSession = Depen
     db.execute(update(AccessCode).where(AccessCode.id == sess.access_code_id)
                .values(completions_count=AccessCode.completions_count + 1))
     db.execute(update(ResponseSession).where(ResponseSession.response_id == resp.id).values(revoked=True))
+    # Den personlige kode BEVARES efter afslutning, så respondenten kan udøve sine rettigheder (indsigt,
+    # portabilitet, sletning, art. 15/17/20) uden at give os en identitet. Den udløber sammen med
+    # opbevaringsperioden og kan ikke bruges til at genoptage en afsluttet besvarelse.
     rk = db.scalar(select(ResumeKey).where(ResumeKey.response_id == resp.id))
     if rk:
-        db.delete(rk)
+        tenant = db.get(Tenant, resp.tenant_id)
+        months = tenant.retention_months if tenant and tenant.retention_months else get_settings().default_retention_months
+        rk.expires_at = resp.started_at + timedelta(days=30 * months)
     clear_cookie(response, RESP_COOKIE)
     return {"status": "completed"}
+
+
+# ---------------------------------------------------------------------------
+# Registreredes rettigheder (GDPR art. 15, 17, 20). Godkendes alene med den personlige kode,
+# da besvarelsen er pseudonym og ikke kan knyttes til en person på anden måde (art. 11).
+# ---------------------------------------------------------------------------
+
+
+class KeyIn(Strict):
+    key: str = Field(min_length=10, max_length=40)
+
+
+def _rights_lookup(body: KeyIn, request: Request, db: Session) -> ResponseRow:
+    s = get_settings()
+    bucket = ratelimit.bucket_for(request, "rights")
+    ratelimit.check_blocked(bucket, s.rl_code_attempts)
+    norm = normalize_code(body.key)
+    rk = db.scalar(select(ResumeKey).where(ResumeKey.lookup_hmac == code_lookup(norm, "resume")))
+    ok = argon2_verify(rk.key_hash if rk else None, norm)
+    resp = db.get(ResponseRow, rk.response_id) if ok and rk else None
+    if not ok or rk is None or resp is None or rk.expires_at <= utcnow():
+        ratelimit.hit(bucket, s.rl_code_attempts, s.rl_code_window)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Koden er ugyldig eller udløbet.")
+    return resp
+
+
+@router.post("/rights/export")
+def rights_export(body: KeyIn, request: Request, db: Session = Depends(get_db, scope="function")):
+    """Indsigt og dataportabilitet: alle data, vi har om besvarelsen, i maskinlæsbart format."""
+    resp = _rights_lookup(body, request, db)
+    sv = db.get(SurveyVersion, resp.survey_version_id)
+    rows = db.execute(
+        select(Question.question_key, Question.text, Subscale.code, Scenario.behavior, Answer.value,
+               Answer.missing_code, Answer.global_position, Answer.answered_at, Answer.rt_ms)
+        .join(Answer, Answer.question_id == Question.id)
+        .join(Subscale, Subscale.id == Question.subscale_id)
+        .join(Scenario, Scenario.id == Question.scenario_id)
+        .where(Answer.response_id == resp.id).order_by(Answer.global_position)
+    ).all()
+    audit.record("respondent.rights_export", actor_type="respondent", tenant_id=resp.tenant_id,
+                 target_type="response", target_id=resp.id)
+    return {
+        "responseId": resp.id,
+        "survey": sv.source_json and json.loads(sv.source_json).get("title"),
+        "status": resp.status,
+        "startedAt": resp.started_at.isoformat(), "completedAt": resp.completed_at.isoformat() if resp.completed_at else None,
+        "background": resp.background, "browserClass": resp.browser_class, "screenClass": resp.screen_class,
+        "answers": [{"questionId": r[0], "question": r[1], "perspective": r[2], "situation": r[3], "value": r[4],
+                     "missingCode": r[5], "position": r[6], "answeredAt": r[7].isoformat() if r[7] else None,
+                     "responseTimeMs": r[8]} for r in rows],
+        "note": "Besvarelsen er pseudonym. Der er ikke gemt navn, e-mail, CPR-nummer eller IP-adresse sammen med den.",
+    }
+
+
+@router.post("/rights/erase")
+def rights_erase(body: KeyIn, request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
+    """Sletning (art. 17) / tilbagekaldelse af samtykke: sletter besvarelsen og alt knyttet til den."""
+    resp = _rights_lookup(body, request, db)
+    rid, tenant_id = resp.id, resp.tenant_id
+    db.delete(resp)  # svar, hændelser, sessioner og personlig kode slettes via ON DELETE CASCADE
+    db.flush()
+    audit.record("respondent.erased", actor_type="respondent", tenant_id=tenant_id,
+                 target_type="response", target_id=rid)
+    clear_cookie(response, RESP_COOKIE)
+    return {"erased": True}

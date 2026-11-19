@@ -37,6 +37,17 @@ class Settings(BaseSettings):
     rl_login_window: int = 900
     default_retention_months: int = 24
 
+    # Oplysninger om driftsansvarlig (databehandler) til de offentlige juridiske sider.
+    # Tomme værdier vises på siderne som 'ikke angivet' – udfyld dem før produktion.
+    operator_name: str = ""
+    operator_cvr: str = ""
+    operator_address: str = ""
+    operator_contact: str = ""      # kontakt vedr. databeskyttelse (e-mail)
+    dpo_contact: str = ""           # databeskyttelsesrådgiver (hvis udpeget)
+    security_contact: str = ""      # sikkerhedshændelser / sårbarheder
+    hosting_provider: str = ""
+    hosting_location: str = ""      # fx 'Frankfurt, Tyskland (EU)'
+
     @field_validator("code_lookup_pepper", "ip_hash_key", "totp_enc_key", "db_password")
     @classmethod
     def _reject_placeholder(cls, v: SecretStr) -> SecretStr:

@@ -58,7 +58,12 @@ def _sessionmaker() -> sessionmaker[Session]:
 
 
 def get_db() -> Iterator[Session]:
-    """FastAPI-dependency: én transaktion pr. request."""
+    """FastAPI-dependency: én transaktion pr. request.
+
+    SKAL bruges som ``Depends(get_db, scope="function")``. Fra FastAPI 0.118 afsluttes yield-afhængigheder
+    ellers EFTER at svaret er sendt – så commit sker for sent, og klientens næste kald (fx efter MFA-login)
+    kan nå at se en session, der endnu ikke er committet (kapløb → 401). Beskyttet af
+    ``tests/test_architecture.py``."""
     db = _sessionmaker()()
     try:
         yield db

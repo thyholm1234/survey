@@ -30,7 +30,7 @@ class EmptyIn(BaseModel):
 
 
 @router.post("/import")
-def import_survey(body: ImportIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def import_survey(body: ImportIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     p.require_tenant(body.tenantId, org=True)
     errors = survey_import.validate(body.document)
     prev = survey_import.preview(body.document) if not errors else None
@@ -53,7 +53,7 @@ def _version(db: Session, p: Principal, version_id: str, org: bool = False) -> S
 
 
 @router.post("/{version_id}/publish")
-def publish(version_id: str, body: EmptyIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def publish(version_id: str, body: EmptyIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     sv = _version(db, p, version_id, org=True)
     try:
         survey_import.publish(db, sv, p.id)
@@ -65,7 +65,7 @@ def publish(version_id: str, body: EmptyIn, p: Principal = Depends(admin), db: S
 
 
 @router.post("/{version_id}/retire")
-def retire(version_id: str, body: EmptyIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def retire(version_id: str, body: EmptyIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     sv = _version(db, p, version_id, org=True)
     if sv.status != "published":
         raise HTTPException(status.HTTP_409_CONFLICT, "Kun publicerede versioner kan udfases.")
@@ -76,7 +76,7 @@ def retire(version_id: str, body: EmptyIn, p: Principal = Depends(admin), db: Se
 
 
 @router.get("")
-def list_surveys(tenantId: str, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def list_surveys(tenantId: str, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     p.require_tenant(tenantId)
     out = []
     for s in db.scalars(select(Survey).where(Survey.tenant_id == tenantId).order_by(Survey.title)):
@@ -93,7 +93,7 @@ def list_surveys(tenantId: str, p: Principal = Depends(admin), db: Session = Dep
 
 
 @router.get("/versions/{version_id}")
-def version_detail(version_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def version_detail(version_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     sv = _version(db, p, version_id)
     doc = json.loads(sv.source_json)
     return {

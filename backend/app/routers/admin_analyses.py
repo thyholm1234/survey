@@ -61,7 +61,7 @@ def _out(r: AnalysisRun, full: bool = False) -> dict:
 
 
 @router.post("", status_code=202)
-def create(body: AnalysisIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def create(body: AnalysisIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     allowed = p.allowed_units(db, body.tenantId)
     sv = db.get(SurveyVersion, body.filters.surveyVersionId)
     if sv is None or sv.tenant_id != body.tenantId:
@@ -91,7 +91,7 @@ def _get(db: Session, p: Principal, run_id: str) -> AnalysisRun:
 
 
 @router.get("/{run_id}")
-def get_run(run_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def get_run(run_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     r = _get(db, p, run_id)
     audit.record("analysis.view", actor_type="user", actor_id=p.id, tenant_id=r.tenant_id,
                  target_type="analysis_run", target_id=r.id)
@@ -99,7 +99,7 @@ def get_run(run_id: str, p: Principal = Depends(admin), db: Session = Depends(ge
 
 
 @router.get("")
-def list_runs(tenantId: str, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def list_runs(tenantId: str, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     allowed = p.allowed_units(db, tenantId)
     runs = db.scalars(select(AnalysisRun).where(AnalysisRun.tenant_id == tenantId)
                       .order_by(AnalysisRun.requested_at.desc()).limit(100))

@@ -64,7 +64,7 @@ def _tenant_out(t: Tenant) -> dict:
 
 
 @router.get("/tenants")
-def list_tenants(p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def list_tenants(p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     q = select(Tenant).order_by(Tenant.name)
     if not p.system_admin:
         q = q.where(Tenant.id.in_(p.tenants() or {""}))
@@ -72,7 +72,7 @@ def list_tenants(p: Principal = Depends(admin), db: Session = Depends(get_db)):
 
 
 @router.post("/tenants", status_code=201)
-def create_tenant(body: TenantIn, p: Principal = Depends(system_admin), db: Session = Depends(get_db)):
+def create_tenant(body: TenantIn, p: Principal = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     t = Tenant(name=body.name, min_cell_size=body.minCellSize, retention_months=body.retentionMonths,
                data_controller=body.dataController, contact=body.contact)
     db.add(t)
@@ -87,7 +87,7 @@ def create_tenant(body: TenantIn, p: Principal = Depends(system_admin), db: Sess
 
 @router.put("/tenants/{tenant_id}")
 def update_tenant(tenant_id: str, body: TenantIn, p: Principal = Depends(system_admin),
-                  db: Session = Depends(get_db)):
+                  db: Session = Depends(get_db, scope="function")):
     t = db.get(Tenant, tenant_id)
     if t is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ikke fundet.")
@@ -104,7 +104,7 @@ class TenantDeleteIn(Strict):
 
 @router.post("/tenants/{tenant_id}/delete")
 def delete_tenant(tenant_id: str, body: TenantDeleteIn, p: Principal = Depends(system_admin),
-                  db: Session = Depends(get_db)):
+                  db: Session = Depends(get_db, scope="function")):
     """Sletter en tenant og AL tilhørende data permanent. Auditloggen bevares (append-only)."""
     t = db.get(Tenant, tenant_id)
     if t is None:
@@ -180,7 +180,7 @@ def _unit_out(u: OrganizationUnit) -> dict:
 
 
 @router.get("/tenants/{tenant_id}/units")
-def list_units(tenant_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def list_units(tenant_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     allowed = p.allowed_units(db, tenant_id)
     units = list(db.scalars(select(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id)
                             .order_by(OrganizationUnit.name)))
@@ -189,7 +189,7 @@ def list_units(tenant_id: str, p: Principal = Depends(admin), db: Session = Depe
 
 
 @router.post("/tenants/{tenant_id}/units", status_code=201)
-def create_unit(tenant_id: str, body: UnitIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def create_unit(tenant_id: str, body: UnitIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     p.require_tenant(tenant_id, org=True)
     unit_type = body.unitType
     if body.parentId:
@@ -215,7 +215,7 @@ def create_unit(tenant_id: str, body: UnitIn, p: Principal = Depends(admin), db:
 
 @router.post("/tenants/{tenant_id}/units/{unit_id}/status")
 def set_unit_status(tenant_id: str, unit_id: str, body: StatusIn, p: Principal = Depends(admin),
-                    db: Session = Depends(get_db)):
+                    db: Session = Depends(get_db, scope="function")):
     p.require_tenant(tenant_id, org=True)
     u = db.get(OrganizationUnit, unit_id)
     if u is None or u.tenant_id != tenant_id:
@@ -240,7 +240,7 @@ class UserIn(Strict):
 
 
 @router.get("/tenants/{tenant_id}/users")
-def list_users(tenant_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def list_users(tenant_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     p.require_tenant(tenant_id, org=True)
     rows = db.execute(select(User, UserScope).join(UserScope, UserScope.user_id == User.id)
                       .where(UserScope.tenant_id == tenant_id)).all()
@@ -253,7 +253,7 @@ def list_users(tenant_id: str, p: Principal = Depends(admin), db: Session = Depe
 
 
 @router.post("/users", status_code=201)
-def create_user(body: UserIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def create_user(body: UserIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     if body.role == ROLE_SYSTEM:
         if not p.system_admin:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Kræver systemadministrator.")
@@ -295,7 +295,7 @@ def create_user(body: UserIn, p: Principal = Depends(admin), db: Session = Depen
 
 
 @router.post("/users/{user_id}/disable")
-def disable_user(user_id: str, body: EmptyIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def disable_user(user_id: str, body: EmptyIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     u = db.get(User, user_id)
     if u is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ikke fundet.")
@@ -346,7 +346,7 @@ def _naive_utc(d: datetime | None) -> datetime | None:
 
 
 @router.post("/access-codes", status_code=201)
-def create_codes(body: CodeIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def create_codes(body: CodeIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     unit = db.get(OrganizationUnit, body.unitId)
     if unit is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ikke fundet.")
@@ -385,7 +385,7 @@ def create_codes(body: CodeIn, p: Principal = Depends(admin), db: Session = Depe
 
 
 @router.get("/access-codes")
-def list_codes(tenantId: str, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def list_codes(tenantId: str, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     allowed = p.allowed_units(db, tenantId)
     codes = db.scalars(select(AccessCode).where(AccessCode.tenant_id == tenantId)
                        .order_by(AccessCode.created_at.desc()).limit(1000))
@@ -393,7 +393,7 @@ def list_codes(tenantId: str, p: Principal = Depends(admin), db: Session = Depen
 
 
 @router.post("/access-codes/{code_id}/disable")
-def disable_code(code_id: str, body: EmptyIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def disable_code(code_id: str, body: EmptyIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     c = db.get(AccessCode, code_id)
     if c is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ikke fundet.")

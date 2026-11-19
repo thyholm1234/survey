@@ -134,12 +134,12 @@ def _admin_session(request: Request, db: Session) -> tuple[User, AdminSession]:
     return user, sess
 
 
-def admin_partial(request: Request, db: Session = Depends(get_db)) -> tuple[User, AdminSession]:
+def admin_partial(request: Request, db: Session = Depends(get_db, scope="function")) -> tuple[User, AdminSession]:
     """Session uden krav om gennemført MFA (bruges kun til MFA-opsætning/-verifikation)."""
     return _admin_session(request, db)
 
 
-def admin(request: Request, db: Session = Depends(get_db)) -> Principal:
+def admin(request: Request, db: Session = Depends(get_db, scope="function")) -> Principal:
     user, sess = _admin_session(request, db)
     if not sess.mfa_passed:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "To-faktor-godkendelse mangler.")
@@ -159,7 +159,7 @@ def system_admin(p: Principal = Depends(admin)) -> Principal:
 # ---------------------------------------------------------------------------
 
 
-def respondent(request: Request, db: Session = Depends(get_db)) -> ResponseSession:
+def respondent(request: Request, db: Session = Depends(get_db, scope="function")) -> ResponseSession:
     token = request.cookies.get(RESP_COOKIE)
     if not token or len(token) > 128:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ingen aktiv besvarelse.")

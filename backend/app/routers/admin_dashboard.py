@@ -63,7 +63,7 @@ def get_dashboard(
     subscaleThreshold: float = Query(DEFAULT_SUBSCALE_THRESHOLD, ge=0.5, le=1.0),
     domainThreshold: float = Query(DEFAULT_DOMAIN_THRESHOLD, ge=0.25, le=1.0),
     p: Principal = Depends(admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     allowed = p.allowed_units(db, tenantId)
     f = parse_filters(surveyVersionId, unitIds, unitType, dateFrom, dateTo, bg, groupTag, includeIncomplete)

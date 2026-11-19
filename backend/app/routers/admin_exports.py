@@ -212,7 +212,7 @@ def report_html(dash: dict, proto: dict, title: str) -> str:
 
 
 @router.post("")
-def export(body: ExportIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
+def export(body: ExportIn, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     allowed = p.allowed_units(db, body.tenantId)
     f = body.filters
     scope_units = (set(f.unitIds) & allowed) if f.unitIds else allowed

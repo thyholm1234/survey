@@ -71,7 +71,7 @@ def _issue_session(db: Session, response: Response, user: User, mfa: bool) -> Ad
 
 
 @router.post("/login")
-def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
+def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
     s = get_settings()
     username = body.username.strip().lower()
     ip_bucket = ratelimit.bucket_for(request, "login")
@@ -104,7 +104,7 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
 
 
 @router.post("/mfa/setup")
-def mfa_setup(ctx=Depends(admin_partial), db: Session = Depends(get_db)):
+def mfa_setup(ctx=Depends(admin_partial), db: Session = Depends(get_db, scope="function")):
     user, _sess = ctx
     if user.totp_enabled:
         raise HTTPException(status.HTTP_409_CONFLICT, "To-faktor er allerede opsat.")
@@ -117,7 +117,7 @@ def mfa_setup(ctx=Depends(admin_partial), db: Session = Depends(get_db)):
 
 @router.post("/mfa/verify")
 def mfa_verify(body: TotpIn, request: Request, response: Response, ctx=Depends(admin_partial),
-               db: Session = Depends(get_db)):
+               db: Session = Depends(get_db, scope="function")):
     s = get_settings()
     user, sess = ctx
     bucket = f"mfa:{user.id}"
@@ -149,7 +149,7 @@ def mfa_verify(body: TotpIn, request: Request, response: Response, ctx=Depends(a
 
 
 @router.post("/password")
-def change_password(body: PasswordIn, ctx=Depends(admin_partial), db: Session = Depends(get_db)):
+def change_password(body: PasswordIn, ctx=Depends(admin_partial), db: Session = Depends(get_db, scope="function")):
     user, sess = ctx
     if not sess.mfa_passed:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "To-faktor-godkendelse mangler.")
@@ -169,7 +169,7 @@ def change_password(body: PasswordIn, ctx=Depends(admin_partial), db: Session = 
 
 
 @router.post("/logout")
-def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+def logout(request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
     token = request.cookies.get(ADMIN_COOKIE)
     if token:
         sess = db.get(AdminSession, token_digest(token))
@@ -182,7 +182,7 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 
 
 @router.get("/me")
-def me(ctx=Depends(admin_partial), db: Session = Depends(get_db)):
+def me(ctx=Depends(admin_partial), db: Session = Depends(get_db, scope="function")):
     user, sess = ctx
     return {
         "username": user.username,

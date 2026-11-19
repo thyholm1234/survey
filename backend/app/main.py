@@ -15,7 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import get_settings
 from .db import ping
-from .routers import admin_analyses, admin_auth, admin_dashboard, admin_exports, admin_org, admin_surveys, respondent, system
+from .routers import admin_analyses, admin_auth, admin_dashboard, admin_exports, admin_org, admin_surveys, public, respondent, system
 
 log = logging.getLogger("app")
 
@@ -29,7 +29,7 @@ WEB_CSP = (
 )
 PERMISSIONS_POLICY = (
     "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=(), "
-    "browsing-topics=(), focus-without-user-activation=()"
+    "browsing-topics=()"
 )
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
@@ -98,7 +98,7 @@ def create_app() -> FastAPI:
             h["Vary"] = "Cookie, Sec-Fetch-Site"
         else:
             # Statiske frontend-filer: html må aldrig caches, js/css skal revalideres
-            h["Cache-Control"] = "no-cache" if path.startswith(("/js/", "/css/")) else "no-store"
+            h["Cache-Control"] = "no-cache" if path.startswith(("/js/", "/css/", "/fonts/")) else "no-store"
             h["Content-Security-Policy"] = WEB_CSP
             h["Reporting-Endpoints"] = 'csp="/api/csp-report"'
         h["Strict-Transport-Security"] = f"max-age={s.hsts_max_age}; includeSubDomains"
@@ -136,7 +136,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     for r in (respondent, admin_auth, admin_org, admin_surveys, admin_dashboard,
-              admin_analyses, admin_exports, system):
+              admin_analyses, admin_exports, system, public):
         app.include_router(r.router)
     # Frontend (vanilla HTML/JS) serveres af appen selv; TLS håndteres af ekstern reverse proxy.
     # Monteres sidst, så /api/* altid rammer routerne. html=True giver /admin/ -> admin/index.html.

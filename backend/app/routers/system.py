@@ -20,7 +20,7 @@ log = logging.getLogger("csp")
 
 @router.get("/admin/audit")
 def list_audit(tenantId: str | None = None, limit: int = 200, p: Principal = Depends(admin),
-               db: Session = Depends(get_db)):
+               db: Session = Depends(get_db, scope="function")):
     """Systemadmin ser alt; organisationsadmin ser egen tenant."""
     q = select(AuditEvent).order_by(AuditEvent.id.desc()).limit(max(1, min(limit, 1000)))
     if not p.system_admin:

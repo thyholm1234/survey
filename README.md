@@ -94,7 +94,7 @@ Publicerede spørgeskemaversioner er beskyttet af DB-triggere (kan ikke ændres 
 ## Test
 
 ```bash
-docker compose --profile test run --rm test          # 62 tests: unit, property, statistik, integration
+docker compose --profile test run --rm test          # 65 tests: unit, property, statistik, integration, arkitektur
 python3 scripts/smoke_test.py --code <KODE> --admin <bruger> --password <pw> --new-password <ny>
 ```
 
@@ -121,6 +121,15 @@ Kører WCAG 2.0–2.2 AA-regler på desktop og mobil, tjekker tastaturbetjening 
 autosave, genindlæsning og at der ingen CSP/Trusted Types-overtrædelser er. Manuel
 skærmlæsertest (NVDA/VoiceOver) skal stadig udføres før produktion.
 
+## Persondata og juridiske sider
+
+Appen serverer `/privatliv/` (privatlivspolitik), `/databehandling/` (roller, foranstaltninger, underdatabehandlere, brud) og `/cookies/`.
+Driftsoplysninger hentes fra `OPERATOR_*`-variablerne via `/api/public/legal-info`; tomme felter vises som »ikke angivet«.
+Appen bruger kun to strengt nødvendige 1.-parts-cookies (`__Host-qa_resp`, `__Host-qa_admin`) og ingen browserlagring, så der er intet cookiebanner.
+
+Registreredes rettigheder (art. 15, 17, 20) kan udøves af respondenten selv med den **personlige kode**, der vises ved start: `POST /api/respondent/rights/export`
+og `/rights/erase` (UI: `/#rettigheder`). Koden bevares efter afslutning og udløber med opbevaringsperioden.
+
 ## Syntetisk datasæt
 
 ```bash
@@ -136,16 +145,20 @@ Svarværdier er reproducerbare ud fra seed `20241119`; id'er og tidsstempler gen
 2. Hæv `HSTS_MAX_AGE` gradvist (300 → 31536000).
 3. Erstat `.env`/`secrets/` med managed secrets (Docker/K8s secrets, Vault). Tag sikker backup af
    `secrets/mariadb-*` – uden dem kan databasen og backups ikke læses.
-4. Backup: `mariadb-dump` fra `db`-containeren; backups er klartekst-SQL og skal krypteres separat.
+4. Backup: `BACKUP_GPG_RECIPIENT=<nøgle> ./scripts/backup.sh` – dump pipes direkte til GPG (AES-256, offentlig nøgle), så der aldrig ligger klartekst på disken
+   og serveren ikke kan dekryptere sine egne backups. Rotation via `BACKUP_KEEP_DAYS` (standard 35). Test gendannelse jævnligt.
 5. Opbevaring: pr. tenant (`retentionMonths`, standard 24). Sletning kører hver time og kan startes
    af systemadmin (`POST /api/admin/system/retention`).
-6. DPIA, databehandleraftale og oplysningstekst (survey-JSON `respondentInfo` + tenant
-   `dataController`/`contact`) skal være på plads før produktion.
+6. Udfyld `OPERATOR_*`, `DPO_CONTACT`, `SECURITY_CONTACT`, `HOSTING_*` i `.env` (vises på de juridiske sider). DPIA, databehandleraftale og oplysningstekst
+   (survey-JSON `respondentInfo` + tenant `dataController`/`contact`) skal være på plads før produktion. Se `docs/compliance/` for tjekliste og skabeloner.
 
 ## Dokumentation
 
 - `docs/data-model.md` – datamodeldiagram
 - `docs/threat-model.md` – trusselsmodel og sikkerhedskontroller
+- `docs/compliance/` – GDPR-tjekliste, sikkerhedskontroller (Datatilsynet/ISO 27001/ENISA), DPIA, ROPA, DPA-skabelon, brudhåndtering, køreplan til ISO 27001/27701
+- `SECURITY.md` – ansvarlig offentliggørelse af sårbarheder
+- `docs/frontend-design.md` – designsystem og tilpasninger (CSP, WCAG, selvhostede skrifttyper/ikoner)
 - `docs/instrument.md` – instrumentets konstrukt, domæner, designvalg og validitetsplan
 - `docs/analysis-protocol.md` – analyseprotokol (scoring, missing, modeller, undertrykkelse)
 - `schema/survey.schema.json` – importformat
