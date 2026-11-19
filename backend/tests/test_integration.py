@@ -589,3 +589,28 @@ def test_frontend_assets_are_versioned_for_cache_busting(client):
     assert client.get("/js/respondent.js").headers["cache-control"] == "no-cache"
     assert client.get("/js/respondent.js?v=000000000000").headers["cache-control"] == "no-cache"
     assert client.get("/admin/").text.count(f"?v={v}") >= 2
+
+
+def test_codes_are_grouped_in_batches_with_unit_blocks(client, org):
+    t, csrf = org["tenant"], org["csrf"]
+    school, daycare = org["units"]["school"], org["units"]["daycare"]
+    # Bestilt rækkefølge: skole først, så dagtilbud
+    issue_codes(client, csrf, org["sv"], {school: 3, daycare: 2})
+    issue_codes(client, csrf, org["sv"], {daycare: 1})
+    codes = client.get(f"/api/admin/access-codes?tenantId={t}").json()
+    batches = {}
+    for c in codes:
+        batches.setdefault(c["batchId"], []).append(c)
+    assert len(batches) == 2
+    big = next(b for b in batches.values() if len(b) == 5)
+    assert sorted((c["batchPos"], c["seqNo"], c["unitId"]) for c in big) == [
+        (0, 1, school), (0, 2, school), (0, 3, school), (1, 1, daycare), (1, 2, daycare)]
+    bid = big[0]["batchId"]
+    # Deaktivér én afdelingsblok, derefter resten af bestillingen
+    r = client.post(f"/api/admin/access-codes/batches/{bid}/disable", json={"tenantId": t, "unitId": school},
+                    headers=H(csrf))
+    assert r.json() == {"disabled": 3}
+    r = client.post(f"/api/admin/access-codes/batches/{bid}/disable", json={"tenantId": t}, headers=H(csrf))
+    assert r.json() == {"disabled": 2}
+    codes = client.get(f"/api/admin/access-codes?tenantId={t}").json()
+    assert sum(c["status"] == "active" for c in codes) == 1  # den anden bestilling er urørt

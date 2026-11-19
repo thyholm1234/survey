@@ -357,6 +357,9 @@ class AccessCode(Base):
     starts_count: Mapped[int] = mapped_column(Integer, default=0)
     completions_count: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(16), default="active")  # active|disabled
+    batch_id: Mapped[str | None] = mapped_column(ID, index=True)  # én pr. bestilling (PDF)
+    batch_pos: Mapped[int | None] = mapped_column(SmallInteger)  # afdelingens plads i bestillingen
+    seq_no: Mapped[int | None] = mapped_column(Integer)  # »Kode nr. X« i afdelingsblokken
     created_by: Mapped[str] = mapped_column(ID)
     created_at: Mapped[datetime] = mapped_column(DT, default=utcnow)
 

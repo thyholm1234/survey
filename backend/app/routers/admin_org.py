@@ -34,6 +34,7 @@ from ..models import (
     Tenant,
     User,
     UserScope,
+    new_id,
     utcnow,
 )
 from ..security import argon2_hash, code_lookup, generate_code, normalize_code
@@ -355,7 +356,9 @@ def disable_user(user_id: str, body: EmptyIn, p: Principal = Depends(admin), db:
 def _code_out(c: AccessCode) -> dict:
     return {"id": c.id, "unitId": c.unit_id, "surveyVersionId": c.survey_version_id, "label": c.label,
             "validFrom": c.valid_from.isoformat() + "Z", "validTo": c.valid_to.isoformat() + "Z",
-            "starts": c.starts_count, "completions": c.completions_count, "status": c.status}
+            "starts": c.starts_count, "completions": c.completions_count, "status": c.status,
+            "batchId": c.batch_id, "batchPos": c.batch_pos, "seqNo": c.seq_no,
+            "createdAt": c.created_at.isoformat() + "Z"}
 
 
 def _naive_utc(d: datetime | None) -> datetime | None:
@@ -427,20 +430,21 @@ def create_codes_pdf(body: CodesIn, p: Principal = Depends(admin),
     parents = {u.id: u.name for u in db.scalars(select(OrganizationUnit).where(
         OrganizationUnit.id.in_({u.parent_id for u, _ in units if u.parent_id} or {""})))}
     sheets = []
-    for (unit, n), codes in zip(units, plain):
+    batch_id = new_id()
+    for pos, ((unit, n), codes) in enumerate(zip(units, plain)):
         for i, c in enumerate(codes, 1):
             prefix = f"{body.label} · " if body.label else ""
             db.add(AccessCode(
                 tenant_id=tenant_id, unit_id=unit.id, survey_version_id=sv.id,
                 lookup_hmac=code_lookup(normalize_code(c)), code_hash=next(hashes),
                 label=f"{prefix}nr. {i} af {n}", group_tags=[], valid_from=vf, valid_to=vt,
-                created_by=p.id,
+                batch_id=batch_id, batch_pos=pos, seq_no=i, created_by=p.id,
             ))
         sheets.append(code_sheets.UnitCodes(unit.name, parents.get(unit.parent_id), codes))
     db.flush()
     audit.record("access_code.create", actor_type="user", actor_id=p.id, tenant_id=tenant_id,
                  target_type="survey_version", target_id=sv.id,
-                 details={"count": total, "units": {u.id: n for u, n in units}})
+                 details={"batchId": batch_id, "count": total, "units": {u.id: n for u, n in units}})
     title = json.loads(sv.source_json).get("title", "Spørgeskema")
     pdf = code_sheets.build(sheets, title, get_settings().public_origin, vt)
     return RawResponse(pdf, media_type="application/pdf", headers={
@@ -453,8 +457,31 @@ def create_codes_pdf(body: CodesIn, p: Principal = Depends(admin),
 def list_codes(tenantId: str, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
     allowed = p.allowed_units(db, tenantId)
     codes = db.scalars(select(AccessCode).where(AccessCode.tenant_id == tenantId)
-                       .order_by(AccessCode.created_at.desc()).limit(1000))
+                       .order_by(AccessCode.created_at.desc()).limit(10000))
     return [_code_out(c) for c in codes if c.unit_id in allowed]
+
+
+class BatchDisableIn(Strict):
+    tenantId: str = Field(max_length=32)
+    unitId: str | None = Field(None, max_length=32)
+
+
+@router.post("/access-codes/batches/{batch_id}/disable")
+def disable_batch(batch_id: str, body: BatchDisableIn, p: Principal = Depends(admin),
+                  db: Session = Depends(get_db, scope="function")):
+    """Deaktiverer alle aktive koder i en bestilling – eller kun i én afdelingsblok (unitId)."""
+    allowed = p.allowed_units(db, body.tenantId)
+    q = select(AccessCode).where(AccessCode.tenant_id == body.tenantId, AccessCode.batch_id == batch_id,
+                                 AccessCode.status == "active")
+    if body.unitId:
+        q = q.where(AccessCode.unit_id == body.unitId)
+    codes = [c for c in db.scalars(q) if c.unit_id in allowed]
+    for c in codes:
+        c.status = "disabled"
+    audit.record("access_code.disable", actor_type="user", actor_id=p.id, tenant_id=body.tenantId,
+                 target_type="access_code_batch", target_id=batch_id,
+                 details={"unitId": body.unitId, "count": len(codes)})
+    return {"disabled": len(codes)}
 
 
 @router.post("/access-codes/{code_id}/disable")

@@ -581,20 +581,75 @@ async function codesTab(panel) {
     } finally { btn.disabled = false; }
   });
   const list = h('div');
+  const openBlocks = new Set();
   const refresh = async () => {
     const codes = await guard(() => api('GET', `/api/admin/access-codes?tenantId=${app.tenantId}`));
     if (!codes) return;
-    const uname = Object.fromEntries(app.units.map((u) => [u.id, unitLabel(u)]));
-    clear(list).append(table('Udstedte koder (kun hash gemmes)', ['Institution / afdeling', 'Etiket', 'Gyldig til', 'Starter', 'Fuldførte', 'Status', ''],
-      codes.map((c) => row(uname[c.unitId] || c.unitId, [c.label, new Date(c.validTo).toLocaleDateString('da-DK'),
-        String(c.starts), String(c.completions), c.status,
-        h('td', {}, c.status === 'active' ? h('button', { type: 'button', class: 'secondary', text: 'Deaktivér', onclick: async () => {
-          await guard(() => api('POST', `/api/admin/access-codes/${c.id}/disable`, {})); refresh(); } }) : '')]))));
+    clear(list).append(...codeBatches(codes, openBlocks, refresh));
   };
   panel.append(heading('codes', 'Adgangskoder'),
     units.length ? h('section', { class: 'card' }, form) : h('p', { class: 'notice', text: 'Opret først institutioner og afdelinger.' }), list);
   applyAssignment();
   refresh();
+}
+
+/** Udstedte koder samlet pr. bestilling (nyeste først) og derefter i afdelingsblokke i bestilt rækkefølge. */
+function codeBatches(codes, openBlocks, refresh) {
+  if (!codes.length) return [h('p', { class: 'hint', text: 'Der er ikke udstedt koder endnu.' })];
+  const uname = Object.fromEntries(app.units.map((u) => [u.id, unitLabel(u)]));
+  const svTitle = Object.fromEntries(app.surveys.flatMap((s) => s.versions.map((v) => [v.id, `${s.title} v${v.versionNo}`])));
+  const batches = new Map();
+  for (const c of codes) {
+    const key = c.batchId || `single-${c.id}`;
+    if (!batches.has(key)) batches.set(key, { id: c.batchId, created: c.createdAt, sv: c.surveyVersionId, validTo: c.validTo, codes: [] });
+    const b = batches.get(key);
+    if (c.createdAt < b.created) b.created = c.createdAt;
+    b.codes.push(c);
+  }
+  const sorted = [...batches.values()].sort((a, b) => b.created.localeCompare(a.created));
+  const sum = (arr, k) => arr.reduce((a, c) => a + c[k], 0);
+  return [h('h3', { text: 'Udstedte koder' }), ...sorted.map((b) => {
+    const blocks = new Map();
+    for (const c of b.codes) {
+      if (!blocks.has(c.unitId)) blocks.set(c.unitId, { unitId: c.unitId, pos: c.batchPos ?? 9999, codes: [] });
+      blocks.get(c.unitId).codes.push(c);
+    }
+    const ordered = [...blocks.values()].sort((x, y) => x.pos - y.pos || (uname[x.unitId] || '').localeCompare(uname[y.unitId] || '', 'da'));
+    const prefix = (b.codes[0].label || '').split(' · nr. ')[0];
+    const label = /^nr\. /.test(b.codes[0].label || '') ? '' : prefix;
+    const active = b.codes.filter((c) => c.status === 'active').length;
+    const disableBtn = (unitId, n, what) => (n && b.id ? h('button', { type: 'button', class: 'secondary', text: `Deaktivér ${what}`,
+      onclick: async () => {
+        if (!confirm(`Deaktivér ${n} aktive koder (${what})? Deltagere kan så ikke længere logge ind med dem.`)) return;
+        const r = await guard(() => api('POST', `/api/admin/access-codes/batches/${b.id}/disable`, { tenantId: app.tenantId, unitId }));
+        if (r) { announce(`${r.disabled} koder deaktiveret`); refresh(); }
+      } }) : null);
+    const blockEls = ordered.map((bl) => {
+      const key = `${b.id || b.codes[0].id}:${bl.unitId}`;
+      bl.codes.sort((x, y) => (x.seqNo ?? 0) - (y.seqNo ?? 0) || x.createdAt.localeCompare(y.createdAt));
+      const act = bl.codes.filter((c) => c.status === 'active').length;
+      const det = h('details', { class: 'code-block', open: openBlocks.has(key) },
+        h('summary', {}, h('strong', { text: uname[bl.unitId] || 'Fjernet afdeling' }),
+          h('span', { class: 'hint', text: ` · ${bl.codes.length} koder · ${sum(bl.codes, 'starts')} startet · `
+            + `${sum(bl.codes, 'completions')} fuldført${act < bl.codes.length ? ` · ${bl.codes.length - act} deaktiveret` : ''}` })),
+        table(`Koder – ${uname[bl.unitId] || ''}`, ['Nr.', 'Starter', 'Fuldførte', 'Status', ''],
+          bl.codes.map((c) => row(c.seqNo != null ? String(c.seqNo) : '–', [String(c.starts), String(c.completions),
+            c.status === 'active' ? 'Aktiv' : 'Deaktiveret',
+            h('td', {}, c.status === 'active' ? h('button', { type: 'button', class: 'secondary', text: 'Deaktivér',
+              onclick: async () => { await guard(() => api('POST', `/api/admin/access-codes/${c.id}/disable`, {})); refresh(); } }) : '')]))),
+        h('div', { class: 'actions' }, disableBtn(bl.unitId, act, 'blokken')));
+      det.addEventListener('toggle', () => { if (det.open) openBlocks.add(key); else openBlocks.delete(key); });
+      return det;
+    });
+    return h('section', { class: 'card code-batch' },
+      h('div', { class: 'batch-head' },
+        h('div', {},
+          h('h4', { text: `Bestilling ${new Date(b.created).toLocaleString('da-DK', { dateStyle: 'medium', timeStyle: 'short' })}${label ? ` · ${label}` : ''}` }),
+          h('p', { class: 'hint', text: `${svTitle[b.sv] || 'Spørgeskema'} · ${b.codes.length} koder i ${ordered.length} `
+            + `${ordered.length === 1 ? 'afdeling' : 'afdelinger'} · gyldige til ${new Date(b.validTo).toLocaleDateString('da-DK')}` })),
+        disableBtn(null, active, 'hele bestillingen')),
+      blockEls);
+  })];
 }
 
 // ------------------------------------------------------------------ Analyser
