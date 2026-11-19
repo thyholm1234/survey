@@ -10,7 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response as RawResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -187,7 +187,12 @@ def _unit_out(u: OrganizationUnit) -> dict:
 
 @router.get("/tenants/{tenant_id}/units")
 def list_units(tenant_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
-    allowed = p.allowed_units(db, tenant_id)
+    if p.system_admin and tenant_id not in p.tenants():
+        # Systemadmin ser kun organisationsstrukturen (til brugeradministration) – ingen besvarelser
+        _require_user_admin(p, db, tenant_id)
+        allowed = set(db.scalars(select(OrganizationUnit.id).where(OrganizationUnit.tenant_id == tenant_id)))
+    else:
+        allowed = p.allowed_units(db, tenant_id)
     units = list(db.scalars(select(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id)
                             .order_by(OrganizationUnit.name)))
     names = {u.id: u.name for u in units}
@@ -278,9 +283,18 @@ class UserIn(Strict):
     canExport: bool = False
 
 
+def _require_user_admin(p: Principal, db: Session, tenant_id: str) -> None:
+    """Brugeradministration i en tenant: organisationsadmin i tenanten eller systemadministrator."""
+    if p.system_admin:
+        if db.get(Tenant, tenant_id) is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ikke fundet.")
+        return
+    p.require_tenant(tenant_id, org=True)
+
+
 @router.get("/tenants/{tenant_id}/users")
 def list_users(tenant_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db, scope="function")):
-    p.require_tenant(tenant_id, org=True)
+    _require_user_admin(p, db, tenant_id)
     rows = db.execute(select(User, UserScope).join(UserScope, UserScope.user_id == User.id)
                       .where(UserScope.tenant_id == tenant_id)).all()
     out: dict[str, dict] = {}
@@ -331,6 +345,61 @@ def create_user(body: UserIn, p: Principal = Depends(admin), db: Session = Depen
                  target_id=user.id, details={"role": body.role, "canExport": body.canExport})
     # Initial adgangskode vises én gang og skal skiftes ved første login (efter MFA-opsætning)
     return {"id": user.id, "username": user.username, "initialPassword": initial}
+
+
+class ScopesIn(Strict):
+    role: Literal["org_admin", "unit_admin"]
+    unitIds: list[str] = Field(default_factory=list, max_length=50)
+    canExport: bool = False
+
+
+@router.put("/tenants/{tenant_id}/users/{user_id}/scopes")
+def set_user_scopes(tenant_id: str, user_id: str, body: ScopesIn, p: Principal = Depends(admin),
+                    db: Session = Depends(get_db, scope="function")):
+    """Erstatter brugerens rolle, afdelinger og eksportret i tenanten. Ændringen gælder fra næste request."""
+    _require_user_admin(p, db, tenant_id)
+    u = db.get(User, user_id)
+    current = [sc for sc in (u.scopes if u else []) if sc.tenant_id == tenant_id]
+    if u is None or not current:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ikke fundet.")
+    if u.id == p.id:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Du kan ikke ændre dine egne rettigheder.")
+    if not p.system_admin and any(sc.role_code == ROLE_SYSTEM for sc in u.scopes):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Kræver systemadministrator.")
+    unit_ids = list(dict.fromkeys(body.unitIds))
+    if body.role == ROLE_UNIT:
+        if not unit_ids:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Vælg mindst én institution eller afdeling.")
+        valid = set(db.scalars(select(OrganizationUnit.id).where(OrganizationUnit.id.in_(unit_ids),
+                                                                 OrganizationUnit.tenant_id == tenant_id)))
+        if valid != set(unit_ids):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Ugyldig afdeling.")
+    was_org = any(sc.role_code == ROLE_ORG for sc in current)
+    if was_org and body.role != ROLE_ORG:
+        others = db.scalar(select(func.count()).select_from(UserScope).join(User, User.id == UserScope.user_id).where(
+            UserScope.tenant_id == tenant_id, UserScope.role_code == ROLE_ORG, UserScope.user_id != u.id,
+            User.status == "active"))
+        if not others:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                "Tenanten skal have mindst én aktiv organisationsadmin.")
+    before = [{"role": sc.role_code, "unitId": sc.unit_id, "canExport": sc.can_export} for sc in current]
+    for sc in current:
+        u.scopes.remove(sc)
+        db.delete(sc)
+    db.flush()
+    if body.role == ROLE_ORG:
+        db.add(UserScope(user_id=u.id, role_code=ROLE_ORG, tenant_id=tenant_id, can_export=body.canExport))
+    else:
+        for uid in unit_ids:
+            db.add(UserScope(user_id=u.id, role_code=ROLE_UNIT, tenant_id=tenant_id, unit_id=uid,
+                             can_export=body.canExport))
+    db.flush()
+    audit.record("user.permissions", actor_type="user", actor_id=p.id, tenant_id=tenant_id, target_type="user",
+                 target_id=u.id, details={"before": before, "after": {"role": body.role, "unitIds": unit_ids,
+                                                                      "canExport": body.canExport}})
+    return {"id": u.id, "username": u.username, "scopes": [
+        {"role": body.role, "unitId": None, "canExport": body.canExport}] if body.role == ROLE_ORG else [
+        {"role": body.role, "unitId": uid, "canExport": body.canExport} for uid in unit_ids]}
 
 
 @router.post("/users/{user_id}/disable")

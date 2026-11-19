@@ -645,3 +645,57 @@ def test_dashboard_compares_selected_units_without_overlap(client, org):
                                                 "filters": {"surveyVersionId": org["sv"], "unitIds": [a, daycare]}},
                     headers=H(csrf))
     assert r.status_code == 200 and "Valgte institutioner og afdelinger" in r.text and "Skole B › 6.A" in r.text
+
+
+def test_edit_user_permissions(client, org):
+    """Case: en organisationsadmin uden eksportret får eksportret af en systemadmin."""
+    t, school = org["tenant"], org["units"]["school"]
+    target = make_admin("org.noexport", [{"role_code": "org_admin", "tenant_id": t, "can_export": False}])
+    url = f"/api/admin/tenants/{t}/users/{target['id']}/scopes"
+
+    # Uden eksportret: eksport afvises
+    csrf_t = login(client, target)
+    body = {"tenantId": t, "format": "long_csv", "filters": {"surveyVersionId": org["sv"]}}
+    assert client.post("/api/admin/exports", json=body, headers=H(csrf_t)).status_code == 403
+    # Man kan ikke give sig selv rettigheder
+    r = client.put(url, json={"role": "org_admin", "canExport": True}, headers=H(csrf_t))
+    assert r.status_code == 422
+
+    # Systemadmin kan se tenantens brugere og strukturen (ikke besvarelser) og ændre rettigheden
+    sa = make_admin("sys.perm", [{"role_code": "system_admin"}])
+    csrf_s = login(client, sa)
+    assert any(u["id"] == target["id"] for u in client.get(f"/api/admin/tenants/{t}/users").json())
+    assert {u["id"] for u in client.get(f"/api/admin/tenants/{t}/units").json()} >= {school}
+    r = client.put(url, json={"role": "org_admin", "canExport": True}, headers=H(csrf_s))
+    assert r.status_code == 200 and r.json()["scopes"] == [{"role": "org_admin", "unitId": None, "canExport": True}]
+
+    # Ændringen virker med det samme for brugeren
+    csrf_t = login(client, target)
+    insert_responses(t, school, org["sv"], 12, seed=21)
+    assert client.post("/api/admin/exports", json=body, headers=H(csrf_t)).status_code == 200
+
+    # Org-admin kan nedgradere en anden bruger til afdelingsadmin for én institution
+    csrf_o = login(client, org["admin"])
+    r = client.put(url, json={"role": "unit_admin", "unitIds": [school], "canExport": False}, headers=H(csrf_o))
+    assert r.status_code == 200
+    users = {u["id"]: u for u in client.get(f"/api/admin/tenants/{t}/users").json()}
+    assert users[target["id"]]["scopes"] == [{"role": "unit_admin", "unitId": school, "canExport": False}]
+    # Afdelingsadmin kræver mindst én enhed; enheder skal høre til tenanten
+    assert client.put(url, json={"role": "unit_admin", "unitIds": []}, headers=H(csrf_o)).status_code == 422
+    assert client.put(url, json={"role": "unit_admin", "unitIds": ["x" * 32]}, headers=H(csrf_o)).status_code == 422
+
+    # Den sidste aktive organisationsadmin kan ikke nedgraderes
+    csrf_s = login(client, sa)
+    r = client.put(f"/api/admin/tenants/{t}/users/{org['admin']['id']}/scopes",
+                   json={"role": "unit_admin", "unitIds": [school]}, headers=H(csrf_s))
+    assert r.status_code == 422 and "mindst én" in r.json()["detail"]
+
+    # Admin i en anden tenant kan ikke se eller ændre brugeren
+    other_t = make_tenant("Anden kommune perm")
+    other = make_admin("org.perm.other", [{"role_code": "org_admin", "tenant_id": other_t}])
+    csrf_x = login(client, other)
+    assert client.put(url, json={"role": "org_admin", "canExport": True}, headers=H(csrf_x)).status_code == 404
+    with get_engine().connect() as c:
+        n = c.execute(text(f"SELECT COUNT(*) FROM {qualified('qa_audit', 'audit_events')} "
+                           "WHERE action='user.permissions' AND target_id=:u"), {"u": target["id"]}).scalar()
+    assert n == 2

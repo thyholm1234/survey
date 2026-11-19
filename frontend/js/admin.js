@@ -795,14 +795,72 @@ async function usersTab(panel) {
       unitIds: [...unit.selectedOptions].map((o) => o.value), canExport: exp.checked }), e);
     if (r) { clear(result).append(h('p', { class: 'notice', text: `Engangsadgangskode for ${r.username} (vises kun nu): ` }, h('code', { text: r.initialPassword }))); load(); }
   });
-  const list = h('div');
-  const load = async () => {
-    const users = await guard(() => api('GET', `/api/admin/tenants/${app.tenantId}/users`));
-    if (users) clear(list).append(table('Brugere', ['Brugernavn', 'Roller', 'MFA', 'Status'], users.map((u) => row(u.username,
-      [u.scopes.map((x) => x.role + (x.canExport ? ' (eksport)' : '')).join(', '), u.mfaEnrolled ? 'ja' : 'nej', u.status]))));
-  };
-  panel.append(heading('users', 'Brugere'), h('section', { class: 'card' }, form, result), list);
+  const users = usersAdmin(app.tenantId, app.units);
+  const load = users.load;
+  panel.append(heading('users', 'Brugere'), h('section', { class: 'card' }, h('h3', { text: 'Ny bruger' }), form, result), users.el);
   load();
+}
+
+const ROLE_NAMES = { org_admin: 'Organisationsadmin', unit_admin: 'Afdelingsadmin', system_admin: 'Systemadmin' };
+
+/** Brugerliste for en tenant med redigering af rolle, afdelinger og eksportret. */
+function usersAdmin(tenantId, units) {
+  const el = h('div');
+  const editArea = h('div');
+  const list = h('div');
+  const unitName = Object.fromEntries(units.map((u) => [u.id, unitLabel(u)]));
+  const describe = (u) => {
+    const role = u.scopes[0]?.role;
+    const where = role === 'unit_admin' ? `: ${u.scopes.map((x) => unitName[x.unitId] || '?').join(', ')}` : '';
+    return `${ROLE_NAMES[role] || role}${where}`;
+  };
+  const edit = (u) => {
+    const e = err('perm-err');
+    const cur = u.scopes[0] || {};
+    const role = h('select', {}, Object.entries({ org_admin: ROLE_NAMES.org_admin, unit_admin: ROLE_NAMES.unit_admin })
+      .map(([k, v]) => h('option', { value: k, text: v, selected: k === cur.role })));
+    const chosen = new Set(u.scopes.map((x) => x.unitId).filter(Boolean));
+    const unitSel = h('select', { multiple: true, size: Math.min(8, Math.max(3, units.length)) },
+      [...units].sort((a, b) => unitLabel(a).localeCompare(unitLabel(b), 'da'))
+        .map((x) => h('option', { value: x.id, text: unitLabel(x), selected: chosen.has(x.id) })));
+    const unitField = field('Institutioner/afdelinger', unitSel, 'Ctrl/Cmd-klik for flere. En institution giver adgang til alle dens afdelinger/klasser.');
+    const exp = h('input', { type: 'checkbox', id: 'perm-exp', checked: u.scopes.some((x) => x.canExport) });
+    const sync = () => { unitField.hidden = role.value !== 'unit_admin'; };
+    role.addEventListener('change', sync);
+    const f = h('form', { method: 'post', action: '/admin/' },
+      h('h3', { text: `Rettigheder for ${u.username}` }),
+      h('div', { class: 'filters' }, field('Rolle', role), unitField),
+      h('p', {}, exp, ' ', h('label', { for: 'perm-exp', text: 'Må eksportere (rækkedata, rapporter og analyser)' })), e,
+      h('div', { class: 'actions' },
+        h('button', { type: 'button', class: 'secondary', text: 'Annullér', onclick: () => clear(editArea) }),
+        h('button', { type: 'submit', text: 'Gem rettigheder' })));
+    f.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const r = await guard(() => api('PUT', `/api/admin/tenants/${tenantId}/users/${u.id}/scopes`, {
+        role: role.value, canExport: exp.checked,
+        unitIds: role.value === 'unit_admin' ? [...unitSel.selectedOptions].map((o) => o.value) : [] }), e);
+      if (r) { clear(editArea); announce(`Rettigheder gemt for ${u.username}`); load(); }
+    });
+    sync();
+    clear(editArea).append(h('section', { class: 'card' }, f));
+    role.focus();
+  };
+  const load = async () => {
+    const users = await guard(() => api('GET', `/api/admin/tenants/${tenantId}/users`));
+    if (!users) return;
+    users.sort((a, b) => a.username.localeCompare(b.username, 'da'));
+    clear(list).append(table('Brugere', ['Brugernavn', 'Rolle', 'Eksport', 'MFA', 'Status', ''], users.map((u) => {
+      const self = u.username === app.me?.username;
+      const sys = u.scopes.some((x) => x.role === 'system_admin');
+      return row(u.username, [describe(u), u.scopes.some((x) => x.canExport) ? 'Ja' : 'Nej', u.mfaEnrolled ? 'ja' : 'nej',
+        u.status === 'active' ? 'Aktiv' : 'Deaktiveret',
+        h('td', {}, self ? h('span', { class: 'hint', text: 'Dig' })
+          : sys && !app.who.systemAdmin ? '' : h('button', { type: 'button', class: 'secondary', text: 'Redigér',
+            'aria-label': `Redigér rettigheder for ${u.username}`, onclick: () => edit(u) }))]);
+    })));
+  };
+  el.append(editArea, list);
+  return { el, load };
 }
 
 // ------------------------------------------------------------------ Audit og tenants
@@ -827,16 +885,20 @@ async function tenantsTab(panel) {
   const k = h('input', { type: 'number', min: 5, max: 100, value: 10 });
   const ret = h('input', { type: 'number', min: 1, max: 120, value: 24 });
   const orgUser = h('input', { type: 'text', autocomplete: 'off', autocapitalize: 'none' });
+  const orgExp = h('input', { type: 'checkbox', id: 'ten-exp' });
   const result = h('div');
+  const tenantUsers = h('section', { class: 'card', 'aria-live': 'polite' });
   if (app.flash) { result.append(app.flash); app.flash = null; }
   const form = h('form', { method: 'post', action: '/admin/' }, h('div', { class: 'filters' }, field('Navn', name), field('Min. cellestørrelse', k), field('Opbevaring (måneder)', ret),
-    field('Første organisationsadmin (brugernavn)', orgUser)), e, h('button', { type: 'submit', text: 'Opret tenant' }));
+    field('Første organisationsadmin (brugernavn)', orgUser)),
+    h('p', {}, orgExp, ' ', h('label', { for: 'ten-exp', text: 'Organisationsadmin må eksportere' })), e,
+    h('button', { type: 'submit', text: 'Opret tenant' }));
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     await guard(async () => {
       const t = await api('POST', '/api/admin/tenants', { name: name.value, minCellSize: Number(k.value), retentionMonths: Number(ret.value) });
       if (orgUser.value) {
-        const u = await api('POST', '/api/admin/users', { username: orgUser.value, role: 'org_admin', tenantId: t.id, canExport: false });
+        const u = await api('POST', '/api/admin/users', { username: orgUser.value, role: 'org_admin', tenantId: t.id, canExport: orgExp.checked });
         // shell() gentegner fanen – gem beskeden så den overlever gentegningen (vises kun én gang)
         app.flash = h('p', { class: 'notice', role: 'status', text: `Engangsadgangskode for ${u.username} (vises kun nu – log ud og log ind som denne bruger for at oprette spørgeskemaer): ` }, h('code', { text: u.initialPassword }));
       }
@@ -848,7 +910,19 @@ async function tenantsTab(panel) {
     h('p', { class: 'hint', text: 'Systemadministratorer kan ikke som standard se besvarelser.' }),
     h('section', { class: 'card' }, form, result),
     table('Tenants', ['Navn', 'Min. celle', 'Opbevaring (mdr.)', 'Status', 'Handling'], app.allTenants.map((t) => row(t.name, [t.minCellSize, t.retentionMonths, t.status,
-      h('td', {}, h('button', { type: 'button', class: 'secondary', 'aria-label': `Slet tenant ${t.name}`, onclick: () => deleteTenant(t, e) }, icon('trash-2', 'icon-sm'), 'Slet'))]))));
+      h('td', {}, h('div', { class: 'actions' },
+        h('button', { type: 'button', class: 'secondary', 'aria-label': `Brugere i ${t.name}`, onclick: () => showTenantUsers(t) }, icon('users', 'icon-sm'), 'Brugere'),
+        h('button', { type: 'button', class: 'secondary', 'aria-label': `Slet tenant ${t.name}`, onclick: () => deleteTenant(t, e) }, icon('trash-2', 'icon-sm'), 'Slet')))]))),
+    tenantUsers);
+  async function showTenantUsers(t) {
+    const units = await guard(() => api('GET', `/api/admin/tenants/${t.id}/units`), e);
+    if (!units) return;
+    const ua = usersAdmin(t.id, units);
+    clear(tenantUsers).append(h('h3', { text: `Brugere i ${t.name}` }),
+      h('p', { class: 'hint', text: 'Du kan ændre rolle, afdelinger og eksportret. Ingen kan ændre deres egne rettigheder.' }), ua.el);
+    await ua.load();
+    tenantUsers.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 async function deleteTenant(t, e) {
