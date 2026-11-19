@@ -1,0 +1,55 @@
+name: Security
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"   # ugentligt: nye sårbarheder opdages også uden kodeændringer
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    name: Kendte sårbarheder i afhængigheder
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pip-audit
+      - name: pip-audit (produktion og test)
+        run: |
+          pip-audit --no-deps --disable-pip -r backend/requirements.txt
+          pip-audit --no-deps --disable-pip -r backend/requirements-dev.txt
+  sast:
+    name: Statisk kodeanalyse (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install bandit
+      # B608 (SQL via f-string) udelades: tabelnavne kommer fra konstanter via qualified(), aldrig fra input;
+      # værdier er altid bundne parametre. Gennemgået manuelt, se docs/compliance/security-controls.md.
+      - run: bandit -r backend/app -ll --skip B608
+  secrets:
+    name: Hemmeligheder i historikken (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  container:
+    name: Container-image (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/init-secrets.sh
+      - run: docker compose build migrate
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: questionnaire-backend:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"

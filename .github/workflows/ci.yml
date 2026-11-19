@@ -18,9 +18,12 @@ jobs:
         run: docker compose up -d db
       - name: Unit-, property-, statistik- og integrationstests
         run: docker compose --profile test run --rm test
+      - name: TLS-proxy (kun CI – produktion bruger egen reverse proxy)
+        run: docker run -d --name tls --network host caddy:2 caddy reverse-proxy --from localhost:443 --to 127.0.0.1:8000
       - name: Fuld stak + smoke-test
         run: |
           docker compose up -d
+          for i in $(seq 1 40); do docker compose ps api --format '{{.Status}}' | grep -q healthy && break; sleep 3; done
           docker compose exec -T api python -m app.cli seed-demo > /tmp/demo.txt
           CODE=$(grep "Skole Syd" /tmp/demo.txt | awk -F': ' '{print $2}')
           PW=$(grep "demo.org" /tmp/demo.txt | awk -F': ' '{print $2}')
