@@ -1,4 +1,4 @@
 -c requirements.txt
-pytest==9.0.3
+pytest==9.2.0
 hypothesis==6.123.2
 httpx==0.28.1
