@@ -172,6 +172,8 @@ th:first-child, td:first-child { text-align: start; }
 thead { position: sticky; inset-block-start: 0; z-index: 1; background: var(--surface); }
 thead th { border-block-end: 1px solid var(--line); }
 tbody th { position: sticky; inset-inline-start: 0; background: var(--surface); font-weight: 500; }
+tbody tr.child th { font-weight: 400; padding-inline-start: 1.4rem; }
+tbody tr.child .indent { color: var(--muted, currentColor); opacity: .6; }
 td.suppressed { color: var(--muted); font-style: italic; }
 td.heat { background: var(--cell-bg, transparent); color: var(--cell-ink, inherit); text-align: center; }
 

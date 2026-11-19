@@ -107,7 +107,7 @@ async function logout() {
 
 // ------------------------------------------------------------------ Shell
 const TABS = [
-  ['dashboard', 'Resultater'], ['surveys', 'Spørgeskemaer'], ['units', 'Afdelinger'], ['codes', 'Adgangskoder'],
+  ['dashboard', 'Resultater'], ['surveys', 'Spørgeskemaer'], ['units', 'Institutioner'], ['codes', 'Adgangskoder'],
   ['analyses', 'Analyser'], ['exports', 'Eksport'], ['users', 'Brugere'], ['audit', 'Auditlog'], ['tenants', 'Tenants'],
 ];
 
@@ -124,6 +124,24 @@ function publishedVersions() {
 function versionSelect(id = 'sv-select') {
   return h('select', { id, required: true }, publishedVersions().map((v) => h('option', { value: v.id, text: `${v.title} v${v.versionNo}` })));
 }
+// Organisation: institution (parentId null) → afdelinger/klasser (parentId = institution)
+function unitLabel(u) { return u.parentId ? `${u.parentName || '?'} › ${u.name}` : u.name; }
+/** Enheder sorteret som træ: institution efterfulgt af dens afdelinger/klasser. */
+function unitsSorted() {
+  const key = (u) => [(u.parentId ? u.parentName : u.name) || '', u.parentId ? 1 : 0, u.name].map((x) => String(x).toLocaleLowerCase('da'));
+  return [...app.units].sort((a, b) => { const ka = key(a); const kb = key(b);
+    for (let i = 0; i < 3; i++) { const c = String(ka[i]).localeCompare(String(kb[i]), 'da'); if (c) return c; } return 0; });
+}
+/** Institutioner brugeren har adgang til (også hvis kun en afdeling/klasse er tilgængelig). */
+function institutionsList() {
+  const m = new Map();
+  for (const u of app.units) {
+    const id = u.parentId || u.id;
+    if (!m.has(id)) m.set(id, { id, name: u.parentId ? u.parentName : u.name, unitType: u.unitType });
+  }
+  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name, 'da'));
+}
+function unitOptions() { return unitsSorted().map((u) => h('option', { value: u.id, text: unitLabel(u) })); }
 function isOrgAdmin() { return app.who?.orgTenants?.includes(app.tenantId); }
 
 function shell() {
@@ -152,8 +170,14 @@ function filterForm(onSubmit, { withThresholds = false } = {}) {
   const sv = versionSelect();
   const unitType = h('select', { id: 'f-type' }, h('option', { value: '', text: 'Alle' }),
     Object.entries(UNIT_TYPES).map(([k, v]) => h('option', { value: k, text: v })));
-  const unit = h('select', { id: 'f-unit' }, h('option', { value: '', text: 'Alle tilgængelige' }),
-    app.units.map((u) => h('option', { value: u.id, text: u.name })));
+  const inst = h('select', { id: 'f-inst' }, h('option', { value: '', text: 'Alle institutioner' }),
+    institutionsList().map((i) => h('option', { value: i.id, text: i.name })));
+  const unit = h('select', { id: 'f-unit', disabled: true }, h('option', { value: '', text: 'Hele institutionen' }));
+  inst.addEventListener('change', () => {
+    const kids = unitsSorted().filter((u) => u.parentId && u.parentId === inst.value);
+    clear(unit).append(h('option', { value: '', text: 'Hele institutionen' }), ...kids.map((u) => h('option', { value: u.id, text: u.name })));
+    unit.disabled = !kids.length;
+  });
   const from = h('input', { type: 'date', id: 'f-from' });
   const to = h('input', { type: 'date', id: 'f-to' });
   const bgWrap = h('div', { class: 'filters' });
@@ -170,14 +194,14 @@ function filterForm(onSubmit, { withThresholds = false } = {}) {
   const thr = h('input', { type: 'number', id: 'f-thr', min: 0.5, max: 1, step: 0.05, value: 0.8 });
   const btn = h('button', { type: 'submit', text: 'Vis' });
   const form = h('form', { method: 'get', action: '/admin/' },
-    h('search', {}, h('div', { class: 'filters' }, field('Spørgeskema', sv), field('Afdelingstype', unitType), field('Afdeling', unit),
+    h('search', {}, h('div', { class: 'filters' }, field('Spørgeskema', sv), field('Type', unitType), field('Institution', inst), field('Afdeling/klasse', unit),
       field('Fra dato', from), field('Til dato', to), withThresholds ? field('Subskala-tærskel', thr, 'Andel besvarede items') : null),
     bgWrap, btn));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const bg = {};
     bgWrap.querySelectorAll('select[data-bg]').forEach((x) => { if (x.value) bg[x.dataset.bg] = x.value; });
-    onSubmit({ surveyVersionId: sv.value, unitIds: unit.value ? [unit.value] : null, unitType: unitType.value || null,
+    onSubmit({ surveyVersionId: sv.value, unitIds: unit.value ? [unit.value] : inst.value ? [inst.value] : null, unitType: unitType.value || null,
       dateFrom: from.value || null, dateTo: to.value || null, background: bg }, Number(thr.value));
   });
   loadBg();
@@ -280,8 +304,13 @@ function renderDashboard(out, d) {
     table('Domæne × subskala', ['Domæne', ...d.subscales.map((x) => x.name)], heatRows)));
 
   // 3. Afdelinger (alfabetisk – ikke rangliste)
-  out.append(h('section', { class: 'card' }, h('h3', { text: '3. Afdelinger (alfabetisk, ikke rangliste)' }),
-    table('Afdelinger', ['Afdeling', 'Type', 'N', ...d.subscales.map((x) => `${x.name} (95 % CI)`)],
+  const byInst = d.comparisonLevel === 'institution';
+  const cmpTitle = byInst ? 'Institutioner' : `Afdelinger/klasser${d.institution ? ` – ${d.institution.name}` : ''}`;
+  out.append(h('section', { class: 'card' }, h('h3', { text: `3. ${cmpTitle} (alfabetisk, ikke rangliste)` }),
+    h('p', { class: 'hint', text: byInst
+      ? 'Hver institution omfatter alle sine afdelinger/klasser. Vælg en institution i filteret for at sammenligne dens afdelinger/klasser.'
+      : 'Profilen ovenfor er hele institutionens resultat; her sammenlignes dens afdelinger/klasser.' }),
+    table(cmpTitle, [byInst ? 'Institution' : 'Afdeling/klasse', 'Type', 'N', ...d.subscales.map((x) => `${x.name} (95 % CI)`)],
       d.units.map((u) => u.suppressed ? row(u.name, [UNIT_TYPES[u.unitType], supCell(1 + d.subscales.length)]) :
         row(u.name, [UNIT_TYPES[u.unitType], u.n, ...u.subscales.map((c) => c.suppressed ? supCell() :
           h('td', { text: `${fmt(c.mean)} (${c.ci95 ? `${fmt(c.ci95[0])}–${fmt(c.ci95[1])}` : '–'})` }))])))));
@@ -364,26 +393,51 @@ function renderPreview(out, r, doc) {
     } }));
 }
 
-// ------------------------------------------------------------------ Afdelinger
+// ------------------------------------------------------------------ Institutioner og afdelinger
 function unitsTab(panel) {
-  const e = err('unit-err');
-  const name = h('input', { type: 'text', required: true, maxlength: 200 });
-  const typ = h('select', {}, Object.entries(UNIT_TYPES).map(([k, v]) => h('option', { value: k, text: v })));
-  const form = h('form', { method: 'post', action: '/admin/' }, h('div', { class: 'filters' }, field('Navn', name), field('Type', typ)), e,
-    h('button', { type: 'submit', text: 'Opret afdeling' }));
-  form.addEventListener('submit', async (ev) => {
+  const org = isOrgAdmin();
+  const e1 = err('inst-err');
+  const iname = h('input', { type: 'text', required: true, maxlength: 200 });
+  const ityp = h('select', {}, Object.entries(UNIT_TYPES).map(([k, v]) => h('option', { value: k, text: v })));
+  const instForm = h('form', { method: 'post', action: '/admin/' },
+    h('div', { class: 'filters' }, field('Navn', iname, 'Fx "Nordskolen" eller "Børnehuset Solsikken"'), field('Type', ityp)), e1,
+    h('button', { type: 'submit', text: 'Opret institution' }));
+  instForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const r = await guard(() => api('POST', `/api/admin/tenants/${app.tenantId}/units`, { name: name.value, unitType: typ.value }), e);
-    if (r) { await loadTenantData(); shell(); }
+    const r = await guard(() => api('POST', `/api/admin/tenants/${app.tenantId}/units`, { name: iname.value, unitType: ityp.value }), e1);
+    if (r) { announce(`Institution ${r.name} oprettet`); await loadTenantData(); shell(); }
   });
-  panel.append(h('h2', { text: 'Afdelinger' }), h('section', { class: 'card' }, form),
-    table('Afdelinger', ['Navn', 'Type', 'Status'], app.units.map((u) => row(u.name, [UNIT_TYPES[u.unitType], u.status]))));
+
+  const insts = app.units.filter((u) => !u.parentId).sort((a, b) => a.name.localeCompare(b.name, 'da'));
+  const e2 = err('sub-err');
+  const parent = h('select', { required: true }, insts.map((i) => h('option', { value: i.id, text: `${i.name} (${UNIT_TYPES[i.unitType]})` })));
+  const sname = h('input', { type: 'text', required: true, maxlength: 200 });
+  const subForm = h('form', { method: 'post', action: '/admin/' },
+    h('div', { class: 'filters' }, field('Institution', parent), field('Navn', sname, 'Fx "3.A", "Vuggestuen" eller "Udskolingen"')), e2,
+    h('button', { type: 'submit', text: 'Opret afdeling/klasse' }));
+  subForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const r = await guard(() => api('POST', `/api/admin/tenants/${app.tenantId}/units`, { name: sname.value, parentId: parent.value }), e2);
+    if (r) { announce(`${r.name} oprettet`); await loadTenantData(); shell(); }
+  });
+
+  const rows = unitsSorted().map((u) => u.parentId
+    ? h('tr', { class: 'child' }, h('th', { scope: 'row' }, h('span', { class: 'indent', 'aria-hidden': 'true', text: '└ ' }), u.name),
+        h('td', { text: 'Afdeling/klasse' }), h('td', { text: UNIT_TYPES[u.unitType] }), h('td', { text: u.status }))
+    : row(u.name, ['Institution', UNIT_TYPES[u.unitType], u.status]));
+  panel.append(h('h2', { text: 'Institutioner og afdelinger' }),
+    h('p', { class: 'hint', text: 'Opret først institutionen (skole, dagtilbud …) og derefter dens afdelinger eller klasser. '
+      + 'Resultater kan ses samlet for institutionen og sammenlignet mellem dens afdelinger/klasser. '
+      + 'Adgangskoder kan udstedes til en afdeling/klasse eller til hele institutionen.' }),
+    org ? h('section', { class: 'card' }, h('h3', { text: 'Ny institution' }), instForm) : null,
+    org && insts.length ? h('section', { class: 'card' }, h('h3', { text: 'Ny afdeling eller klasse' }), subForm) : null,
+    table('Institutioner og afdelinger', ['Navn', 'Niveau', 'Type', 'Status'], rows));
 }
 
 // ------------------------------------------------------------------ Koder
 async function codesTab(panel) {
   const e = err('code-err');
-  const unit = h('select', {}, app.units.map((u) => h('option', { value: u.id, text: u.name })));
+  const unit = h('select', {}, unitOptions());
   const sv = versionSelect('code-sv');
   const count = h('input', { type: 'number', min: 1, max: 500, value: 1 });
   const maxStarts = h('input', { type: 'number', min: 1 });
@@ -392,7 +446,7 @@ async function codesTab(panel) {
   const label = h('input', { type: 'text', maxlength: 200 });
   const result = h('div');
   const form = h('form', { method: 'post', action: '/admin/' },
-    h('div', { class: 'filters' }, field('Afdeling', unit), field('Spørgeskema', sv), field('Antal koder', count),
+    h('div', { class: 'filters' }, field('Institution / afdeling', unit), field('Spørgeskema', sv), field('Antal koder', count),
       field('Maks. starter pr. kode', maxStarts, 'Tom = ubegrænset'), field('Gyldig til', validTo), field('Etiket', label)),
     h('p', {}, oneTime, ' ', h('label', { for: 'onetime', text: 'Engangskoder (én besvarelse pr. kode – dubletkontrol)' })), e,
     h('button', { type: 'submit', text: 'Generér koder' }));
@@ -412,8 +466,8 @@ async function codesTab(panel) {
   const refresh = async () => {
     const codes = await guard(() => api('GET', `/api/admin/access-codes?tenantId=${app.tenantId}`));
     if (!codes) return;
-    const uname = Object.fromEntries(app.units.map((u) => [u.id, u.name]));
-    clear(list).append(table('Udstedte koder (kun hash gemmes)', ['Afdeling', 'Etiket', 'Gyldig til', 'Starter', 'Fuldførte', 'Status', ''],
+    const uname = Object.fromEntries(app.units.map((u) => [u.id, unitLabel(u)]));
+    clear(list).append(table('Udstedte koder (kun hash gemmes)', ['Institution / afdeling', 'Etiket', 'Gyldig til', 'Starter', 'Fuldførte', 'Status', ''],
       codes.map((c) => row(uname[c.unitId] || c.unitId, [c.label, new Date(c.validTo).toLocaleDateString('da-DK'),
         `${c.starts}${c.maxStarts ? ` / ${c.maxStarts}` : ''}`, String(c.completions), c.status,
         h('td', {}, c.status === 'active' ? h('button', { type: 'button', class: 'secondary', text: 'Deaktivér', onclick: async () => {
@@ -532,10 +586,10 @@ async function usersTab(panel) {
   const e = err('usr-err');
   const uname = h('input', { type: 'text', required: true, pattern: '[a-z0-9._@\\-]{3,100}', autocomplete: 'off', autocapitalize: 'none' });
   const role = h('select', {}, h('option', { value: 'unit_admin', text: 'Afdelingsadmin' }), h('option', { value: 'org_admin', text: 'Organisationsadmin' }));
-  const unit = h('select', { multiple: true, size: 4 }, app.units.map((u) => h('option', { value: u.id, text: u.name })));
+  const unit = h('select', { multiple: true, size: 6 }, unitOptions());
   const exp = h('input', { type: 'checkbox', id: 'u-exp' });
   const result = h('div');
-  const form = h('form', { method: 'post', action: '/admin/' }, h('div', { class: 'filters' }, field('Brugernavn', uname, 'Små bogstaver, tal og . _ @ -'), field('Rolle', role), field('Afdelinger (afdelingsadmin)', unit)),
+  const form = h('form', { method: 'post', action: '/admin/' }, h('div', { class: 'filters' }, field('Brugernavn', uname, 'Små bogstaver, tal og . _ @ -'), field('Rolle', role), field('Institutioner/afdelinger (afdelingsadmin)', unit, 'En institution giver adgang til alle dens afdelinger/klasser')),
     h('p', {}, exp, ' ', h('label', { for: 'u-exp', text: 'Må eksportere' })), e, h('button', { type: 'submit', text: 'Opret bruger' }));
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();

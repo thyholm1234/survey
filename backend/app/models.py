@@ -14,6 +14,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Computed,
     ForeignKey,
     Index,
     Integer,
@@ -65,12 +66,15 @@ class Tenant(Base):
 class OrganizationUnit(Base):
     __tablename__ = "organization_units"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "name", name="uq_unit_name"),
+        UniqueConstraint("tenant_id", "parent_key", "name", name="uq_unit_name"),
         {"schema": "qa_data"},
     )
+    """To niveauer: institution (parent_id NULL) og afdeling/klasse (parent_id = institution).
+    Navne er unikke pr. institution (parent_key gør NULL sammenlignelig i unik-nøglen)."""
     id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("qa_data.tenants.id"), index=True)
     parent_id: Mapped[str | None] = mapped_column(ForeignKey("qa_data.organization_units.id"))
+    parent_key: Mapped[str] = mapped_column(String(32), Computed("IFNULL(parent_id, '')", persisted=True))
     name: Mapped[str] = mapped_column(String(200))
     unit_type: Mapped[str] = mapped_column(String(16))  # daycare | school | other
     status: Mapped[str] = mapped_column(String(16), default="active")

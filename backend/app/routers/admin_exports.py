@@ -50,7 +50,7 @@ def _csv(rows: list[list], header: list[str]) -> str:
     return buf.getvalue()
 
 
-LONG_COLS = ["response_id", "unit_id", "unit_type", "question_key", "scenario_key", "subscale", "domain",
+LONG_COLS = ["response_id", "unit_id", "institution_id", "unit_type", "question_key", "scenario_key", "subscale", "domain",
              "raw", "value", "missing", "global_position", "block_index", "block_position",
              "first_shown_at", "answered_at", "rt_ms", "change_count", "changed_after_back"]
 
@@ -63,7 +63,7 @@ def long_csv(ds: analysis_data.Dataset, sv_id: str) -> str:
         rr = r._asdict()
         raw = rr["raw"]
         rows.append([
-            rr["response_id"], rr["unit_id"], rr["unit_type"], rr["question_key"], rr["scenario_key"],
+            rr["response_id"], rr["unit_id"], rr["institution_id"], rr["unit_type"], rr["question_key"], rr["scenario_key"],
             rr["subscale"], rr["domain"], None if raw != raw or raw is None else int(raw),
             None if rr["value"] != rr["value"] else rr["value"], rr["missing"],
             None if rr["global_position"] != rr["global_position"] else int(rr["global_position"]),
@@ -89,12 +89,12 @@ def wide_csv(ds: analysis_data.Dataset, sv_id: str) -> str:
     rows = []
     for r in ds.responses.itertuples(index=False):
         d = r._asdict()
-        rows.append([d["response_id"], d["unit_id"], d["unit_type"], sv_id, d["status"],
+        rows.append([d["response_id"], d["unit_id"], d["institution_id"], d["unit_type"], sv_id, d["status"],
                      d["started_at"].isoformat() if d["started_at"] is not None else None,
                      d["completed_at"].isoformat() if d["completed_at"] is not None and d["completed_at"] == d["completed_at"] else None,
                      d["seed"], d["block_order"], *[d.get(c) for c in bg],
                      *[pivot.at[d["response_id"], q] if q in pivot.columns else None for q in qkeys]])
-    header = ["response_id", "unit_id", "unit_type", "survey_version_id", "status", "started_at",
+    header = ["response_id", "unit_id", "institution_id", "unit_type", "survey_version_id", "status", "started_at",
               "completed_at", "seed", "block_order", *bg, *qkeys]
     return _csv(rows, header)
 
@@ -168,6 +168,21 @@ def report_html(dash: dict, proto: dict, title: str) -> str:
                          f"<td>{_fmt(r['missingPct'], 1)}</td><td>{_fmt(r['mean'])}</td><td>{_fmt(r['sd'])}</td>"
                          f"<td>{_fmt(r['median'])}</td><td>{_fmt(r['iqr'])}</td>"
                          f"<td>{_fmt(ci[0])}–{_fmt(ci[1])}</td></tr>")
+        parts.append("</tbody></table>")
+        lvl = "Institutioner" if dash.get("comparisonLevel") == "institution" else (
+            f"Afdelinger/klasser – {dash['institution']['name']}" if dash.get("institution") else "Afdelinger/klasser")
+        parts.append(f"<table><caption>{e(lvl)} (alfabetisk, ikke rangliste; middel)</caption><thead><tr>"
+                     "<th scope='col'>Navn</th><th scope='col'>N</th>"
+                     + "".join(f"<th scope='col'>{e(names[s['code']])}</th>" for s in dash["subscales"])
+                     + "</tr></thead><tbody>")
+        for u in dash["units"]:
+            if u.get("suppressed"):
+                parts.append(f"<tr><th scope='row'>{e(u['name'])}</th>"
+                             f"<td colspan='{1 + len(dash['subscales'])}'>Undertrykt</td></tr>")
+                continue
+            parts.append(f"<tr><th scope='row'>{e(u['name'])}</th><td>{u['n']}</td>" + "".join(
+                "<td>Undertrykt</td>" if c.get("suppressed") else f"<td>{_fmt(c['mean'])}</td>" for c in u["subscales"])
+                + "</tr>")
         parts.append("</tbody></table>")
         parts.append("<table><caption>Skole og dagtilbud (beskrivende; Hedges g skole minus dagtilbud)</caption>"
                      "<thead><tr><th scope='col'>Subskala</th><th scope='col'>Dagtilbud middel (n)</th>"

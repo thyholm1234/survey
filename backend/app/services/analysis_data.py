@@ -86,13 +86,17 @@ def load(db: Session, tenant_id: str, allowed_unit_ids: set[str], f: Filters) ->
     scale_row = db.scalar(select(ResponseScale).where(ResponseScale.survey_version_id == sv.id))
     scale = {"min": scale_row.min_value, "max": scale_row.max_value}
 
+    all_units = list(db.scalars(select(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id)))
     unit_ids = set(allowed_unit_ids)
     if f.unitIds:
-        unit_ids &= set(f.unitIds)
+        # Valg af en institution omfatter dens afdelinger/klasser
+        wanted = set(f.unitIds) | {u.id for u in all_units if u.parent_id in f.unitIds}
+        unit_ids &= wanted
+    names = {u.id: u.name for u in all_units}
     units = {
-        u.id: {"name": u.name, "unitType": u.unit_type}
-        for u in db.scalars(select(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id))
-        if u.id in unit_ids
+        u.id: {"name": u.name, "unitType": u.unit_type, "parentId": u.parent_id,
+               "institutionId": u.parent_id or u.id, "institutionName": names.get(u.parent_id or u.id, u.name)}
+        for u in all_units if u.id in unit_ids
     }
     base_q = select(Response).where(
         Response.tenant_id == tenant_id,
@@ -118,8 +122,8 @@ def load(db: Session, tenant_id: str, allowed_unit_ids: set[str], f: Filters) ->
         if f.groupTag and f.groupTag not in (r.group_tags or []):
             continue
         resps.append({
-            "response_id": r.id, "unit_id": r.unit_id, "unit_type": r.unit_type,
-            "status": r.status, "started_at": r.started_at, "completed_at": r.completed_at,
+            "response_id": r.id, "unit_id": r.unit_id, "institution_id": units[r.unit_id]["institutionId"],
+            "unit_type": r.unit_type, "status": r.status, "started_at": r.started_at, "completed_at": r.completed_at,
             "seed": r.seed, "block_order": "|".join(r.block_order), "is_synthetic": r.is_synthetic,
             "browser_class": r.browser_class, "screen_class": r.screen_class,
             **{f"bg_{k}": v for k, v in bg.items()},
@@ -143,7 +147,7 @@ def load(db: Session, tenant_id: str, allowed_unit_ids: set[str], f: Filters) ->
     ans = pd.DataFrame(ans_rows, columns=["response_id", "qid", "raw", "missing_code", "global_position",
                                           "block_index", "block_position", "first_shown_at",
                                           "answered_at", "rt_ms", "change_count", "changed_after_back"])
-    grid = responses[["response_id", "unit_id", "unit_type"]].merge(qf, how="cross")
+    grid = responses[["response_id", "unit_id", "institution_id", "unit_type"]].merge(qf, how="cross")
     long = grid.merge(ans, on=["response_id", "qid"], how="left")
     shown = long["first_shown_at"].notna()
     long["missing"] = None
@@ -180,6 +184,7 @@ def respondent_scores(ds: Dataset, sub_thr: float, dom_thr: float) -> tuple[pd.D
     meta = ds.responses.set_index("response_id")
     for df in (sub, dom):
         df["unit_id"] = df["response_id"].map(meta["unit_id"])
+        df["institution_id"] = df["response_id"].map(meta["institution_id"])
         df["unit_type"] = df["response_id"].map(meta["unit_type"])
     return sub, dom
 

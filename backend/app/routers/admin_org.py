@@ -8,7 +8,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -144,8 +144,8 @@ def delete_tenant(tenant_id: str, body: TenantDeleteIn, p: Principal = Depends(s
     run("responseScales", delete(ResponseScale).where(ResponseScale.survey_version_id.in_(sv_ids)))
     run("surveyVersions", delete(SurveyVersion).where(SurveyVersion.tenant_id == tenant_id))
     run("surveys", delete(Survey).where(Survey.tenant_id == tenant_id))
-    db.execute(update(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id).values(parent_id=None)
-               .execution_options(synchronize_session=False))
+    run("subUnits", delete(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id,
+                                                   OrganizationUnit.parent_id.is_not(None)))
     run("units", delete(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id))
     db.expunge(t)
     db.execute(delete(Tenant).where(Tenant.id == tenant_id))
@@ -168,38 +168,48 @@ class EmptyIn(Strict):
 
 
 class UnitIn(Strict):
+    """Uden parentId: institution (type påkrævet). Med parentId: afdeling/klasse (arver type)."""
     name: str = Name
-    unitType: Literal["daycare", "school", "other"]
+    unitType: Literal["daycare", "school", "other"] | None = None
     parentId: str | None = Field(None, max_length=32)
 
 
 def _unit_out(u: OrganizationUnit) -> dict:
-    return {"id": u.id, "name": u.name, "unitType": u.unit_type, "parentId": u.parent_id, "status": u.status}
+    return {"id": u.id, "name": u.name, "unitType": u.unit_type, "parentId": u.parent_id, "status": u.status,
+            "level": "subunit" if u.parent_id else "institution"}
 
 
 @router.get("/tenants/{tenant_id}/units")
 def list_units(tenant_id: str, p: Principal = Depends(admin), db: Session = Depends(get_db)):
     allowed = p.allowed_units(db, tenant_id)
-    units = db.scalars(select(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id)
-                       .order_by(OrganizationUnit.name))
-    return [_unit_out(u) for u in units if u.id in allowed]
+    units = list(db.scalars(select(OrganizationUnit).where(OrganizationUnit.tenant_id == tenant_id)
+                            .order_by(OrganizationUnit.name)))
+    names = {u.id: u.name for u in units}
+    return [{**_unit_out(u), "parentName": names.get(u.parent_id)} for u in units if u.id in allowed]
 
 
 @router.post("/tenants/{tenant_id}/units", status_code=201)
 def create_unit(tenant_id: str, body: UnitIn, p: Principal = Depends(admin), db: Session = Depends(get_db)):
     p.require_tenant(tenant_id, org=True)
+    unit_type = body.unitType
     if body.parentId:
         parent = db.get(OrganizationUnit, body.parentId)
         if parent is None or parent.tenant_id != tenant_id:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Ugyldig overordnet afdeling.")
-    u = OrganizationUnit(tenant_id=tenant_id, name=body.name, unit_type=body.unitType, parent_id=body.parentId)
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Ugyldig institution.")
+        if parent.parent_id is not None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                "Afdelinger/klasser kan kun oprettes direkte under en institution.")
+        unit_type = parent.unit_type
+    elif unit_type is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Vælg institutionstype.")
+    u = OrganizationUnit(tenant_id=tenant_id, name=body.name, unit_type=unit_type, parent_id=body.parentId)
     db.add(u)
     try:
         db.flush()
     except IntegrityError:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Afdelingsnavnet findes allerede.") from None
+        raise HTTPException(status.HTTP_409_CONFLICT, "Navnet findes allerede på dette niveau.") from None
     audit.record("unit.create", actor_type="user", actor_id=p.id, tenant_id=tenant_id, target_type="unit",
-                 target_id=u.id, details={"unitType": u.unit_type})
+                 target_id=u.id, details={"unitType": u.unit_type, "parentId": u.parent_id})
     return _unit_out(u)
 
 

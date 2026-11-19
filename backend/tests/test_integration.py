@@ -248,7 +248,7 @@ def test_export_and_analysis_reproducible(client, org):
     r2 = client.post("/api/admin/exports", json=body, headers=H(org["csrf"]))
     assert r1.status_code == 200 and r1.headers["X-Data-SHA256"] == r2.headers["X-Data-SHA256"]
     csv = r1.text
-    assert csv.splitlines()[0].startswith("response_id,unit_id,unit_type,question_key")
+    assert csv.splitlines()[0].startswith("response_id,unit_id,institution_id,unit_type,question_key")
     assert len(csv.splitlines()) == 30 * 160 + 1
     # analysekørsel på samme filtre -> samme datahash (protokollen reproducerer eksporten)
     r = client.post("/api/admin/analyses", json={"tenantId": t, "kind": "group_comparison",
@@ -337,3 +337,46 @@ def test_published_version_still_immutable_without_tenant_purge(client, org):
     with pytest.raises(Exception, match="immutable"):
         with session_scope() as db:
             db.query(SurveyVersion).filter_by(id=org["sv"]).delete()
+
+
+def test_institution_hierarchy_and_dashboard_levels(client, org):
+    t, csrf, school = org["tenant"], org["csrf"], org["units"]["school"]
+
+    def mk(**body):
+        return client.post(f"/api/admin/tenants/{t}/units", json=body, headers=H(csrf))
+
+    a = mk(name="3.A", parentId=school)
+    assert a.status_code == 201 and a.json()["unitType"] == "school" and a.json()["level"] == "subunit"
+    b = mk(name="3.B", parentId=school).json()["id"]
+    a = a.json()["id"]
+    assert mk(name="3.A", parentId=school).status_code == 409          # unik pr. institution
+    other = mk(name="Østskolen", unitType="school").json()["id"]
+    assert mk(name="3.A", parentId=other).status_code == 201          # samme klassenavn på anden skole
+    assert mk(name="Gruppe 1", parentId=a).status_code == 422          # kun to niveauer
+    assert mk(name="Uden type").status_code == 422                     # institution kræver type
+    units = {u["id"]: u for u in client.get(f"/api/admin/tenants/{t}/units").json()}
+    assert units[a]["parentName"] == units[school]["name"]
+
+    insert_responses(t, a, org["sv"], 12, seed=1)
+    insert_responses(t, b, org["sv"], 12, seed=2)
+    insert_responses(t, org["units"]["daycare"], org["sv"], 12, seed=3)
+
+    d = client.get(f"/api/admin/dashboard?tenantId={t}&surveyVersionId={org['sv']}").json()
+    assert d["comparisonLevel"] == "institution"
+    rows = {u["unitId"]: u for u in d["units"]}
+    assert set(rows) == {school, org["units"]["daycare"]} and rows[school]["n"] == 24
+
+    d = client.get(f"/api/admin/dashboard?tenantId={t}&surveyVersionId={org['sv']}&unitIds={school}").json()
+    assert d["n"] == 24 and d["comparisonLevel"] == "subunit" and d["institution"]["id"] == school
+    assert [u["name"] for u in d["units"]] == ["3.A", "3.B"]
+
+    # Afdelingsadmin for institutionen ser dens klasser; admin for én klasse ser kun den
+    ua = make_admin("unit.school", [{"role_code": "unit_admin", "tenant_id": t, "unit_id": school}])
+    login(client, ua)
+    assert {u["id"] for u in client.get(f"/api/admin/tenants/{t}/units").json()} == {school, a, b}
+    assert client.get(f"/api/admin/dashboard?tenantId={t}&surveyVersionId={org['sv']}").json()["n"] == 24
+    ca = make_admin("unit.class", [{"role_code": "unit_admin", "tenant_id": t, "unit_id": a}])
+    login(client, ca)
+    assert {u["id"] for u in client.get(f"/api/admin/tenants/{t}/units").json()} == {a}
+    d = client.get(f"/api/admin/dashboard?tenantId={t}&surveyVersionId={org['sv']}&unitIds={school}").json()
+    assert d["n"] == 12

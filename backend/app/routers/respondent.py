@@ -105,6 +105,10 @@ def _code_valid(code: AccessCode | None, db: Session) -> tuple[SurveyVersion, Te
         return None
     if unit is None or unit.status != "active":
         return None
+    if unit.parent_id:  # deaktiveret institution lukker også dens afdelinger/klasser
+        parent = db.get(OrganizationUnit, unit.parent_id)
+        if parent is None or parent.status != "active":
+            return None
     return sv, tenant
 
 

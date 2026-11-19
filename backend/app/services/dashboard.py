@@ -80,23 +80,42 @@ def build(ds: Dataset, f: Filters, k: int, sub_thr: float, dom_thr: float) -> di
          **_desc(dom.loc[(dom.subscale == s) & (dom.domain == d), "score"], n, k)}
         for d in doms for s in subs
     ]
-    # 3. Afdelingssammenligning (alfabetisk, ikke rangliste)
-    sizes = ds.responses.groupby("unit_id").size().to_dict()
+    # 3. Sammenligning (alfabetisk, ikke rangliste).
+    #    Flere institutioner i udvalget → sammenlign institutioner (inkl. deres afdelinger/klasser).
+    #    Én institution → sammenlign dens afdelinger/klasser; besvarelser direkte på institutionen
+    #    vises som egen række.
+    institutions = ds.responses["institution_id"].unique().tolist()
+    level = "institution" if len(institutions) > 1 else "subunit"
+    key = "institution_id" if level == "institution" else "unit_id"
+    sizes = ds.responses.groupby(key).size().to_dict()
     hidden = secondary_suppression(sizes, k)
+
+    def label(gid: str) -> tuple[str, str]:
+        info = ds.units.get(gid)
+        if info is None:  # institution uden for udvalget (kun dens afdelinger er med)
+            info = next(v for v in ds.units.values() if v["institutionId"] == gid)
+            return info["institutionName"], info["unitType"]
+        if level == "subunit" and info["parentId"] is None and len(sizes) > 1:
+            return f"{info['name']} (uden afdeling/klasse)", info["unitType"]
+        return (info["institutionName"] if level == "institution" else info["name"]), info["unitType"]
+
     units_out = []
-    for uid, info in sorted(ds.units.items(), key=lambda kv: kv[1]["name"]):
-        if uid not in sizes:
-            continue
-        if uid in hidden:
-            units_out.append({"unitId": uid, "name": info["name"], "unitType": info["unitType"],
-                              "suppressed": True})
+    for gid in sorted(sizes, key=lambda g: label(g)[0].casefold()):
+        name, utype = label(gid)
+        if gid in hidden:
+            units_out.append({"unitId": gid, "name": name, "unitType": utype, "suppressed": True})
             continue
         units_out.append({
-            "unitId": uid, "name": info["name"], "unitType": info["unitType"], "suppressed": False,
-            "n": int(sizes[uid]),
-            "subscales": [{"subscale": s, **_desc(sub.loc[(sub.unit_id == uid) & (sub.subscale == s), "score"],
-                                                  int(sizes[uid]), k)} for s in subs],
+            "unitId": gid, "name": name, "unitType": utype, "suppressed": False,
+            "n": int(sizes[gid]),
+            "subscales": [{"subscale": s, **_desc(sub.loc[(sub[key] == gid) & (sub.subscale == s), "score"],
+                                                  int(sizes[gid]), k)} for s in subs],
         })
+    out["comparisonLevel"] = level
+    if level == "subunit" and institutions:
+        out["institution"] = {"id": institutions[0],
+                              "name": next(v["institutionName"] for v in ds.units.values()
+                                           if v["institutionId"] == institutions[0])}
     out["units"] = units_out
 
     # 4. Skole vs dagtilbud (deskriptivt + Hedges g; inferens via analysekørsel)

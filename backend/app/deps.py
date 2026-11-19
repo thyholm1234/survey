@@ -93,6 +93,17 @@ def _load_principal(db: Session, user: User, sess: AdminSession) -> Principal:
             p.unit_scopes.setdefault(sc.tenant_id, set()).add(sc.unit_id)
             if sc.can_export:
                 p.export_units.add(sc.unit_id)
+    if p.unit_scopes:
+        # Adgang til en institution omfatter dens afdelinger/klasser (ét niveau)
+        scoped = set().union(*p.unit_scopes.values())
+        for cid, parent, tid in db.execute(
+            select(OrganizationUnit.id, OrganizationUnit.parent_id, OrganizationUnit.tenant_id)
+            .where(OrganizationUnit.parent_id.in_(scoped))
+        ):
+            if parent in p.unit_scopes.get(tid, set()):
+                p.unit_scopes[tid].add(cid)
+                if parent in p.export_units:
+                    p.export_units.add(cid)
     return p
 
 

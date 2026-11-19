@@ -62,6 +62,13 @@ Krav til proxyen: videresend `X-Forwarded-For` og `X-Forwarded-Proto` (uvicorn s
 Systemadmin har bevidst ikke adgang til tenant-indhold. For at oprette spørgeskemaer: opret en tenant
 under fanen *Tenants* med en første organisationsadmin, og log ind som den bruger. Mistet
 engangsadgangskode: `docker compose exec api python -m app.cli reset-password <brugernavn>`.
+Organisationen har to niveauer: **institutioner** (skole, dagtilbud, andet) og under dem
+**afdelinger/klasser** (fanen *Institutioner*). Navne er unikke pr. institution. Adgangskoder kan
+udstedes til en afdeling/klasse eller hele institutionen. Under *Resultater* sammenlignes institutioner,
+når ingen er valgt; vælges en institution, vises dens samlede resultat og en sammenligning af dens
+afdelinger/klasser. En afdelingsadmin for en institution har adgang til alle dens afdelinger/klasser.
+Eksporter har kolonnen `institution_id`.
+
 Systemadmin kan slette en tenant (fanen *Tenants* → *Slet*, bekræft ved at skrive navnet). Det sletter
 permanent afdelinger, spørgeskemaer (også publicerede), adgangskoder, besvarelser, analyser og brugere
 der kun har adgang til den tenant. Auditloggen bevares.
@@ -85,7 +92,7 @@ Publicerede spørgeskemaversioner er beskyttet af DB-triggere (kan ikke ændres 
 ## Test
 
 ```bash
-docker compose --profile test run --rm test          # 61 tests: unit, property, statistik, integration
+docker compose --profile test run --rm test          # 62 tests: unit, property, statistik, integration
 python3 scripts/smoke_test.py --code <KODE> --admin <bruger> --password <pw> --new-password <ny>
 ```
 
