@@ -148,6 +148,9 @@ def report_html(dash: dict, proto: dict, title: str) -> str:
         "<p class='note'>Resultaterne er aggregerede, beskrivende og må ikke bruges til individuelle "
         "medarbejderprofiler, ranglister eller performancebeslutninger. Forskelle må ikke fortolkes kausalt.</p>",
     ]
+    if dash.get("syntheticN"):
+        parts.append(f"<p class='note'><strong>DEMODATA:</strong> {dash['syntheticN']} af {dash['n']} besvarelser er "
+                     "syntetiske demosvar og ikke rigtige besvarelser.</p>")
     if dash.get("suppressed"):
         parts.append(f"<p>{e(dash.get('reason', 'Undertrykt.'))}</p>")
     else:

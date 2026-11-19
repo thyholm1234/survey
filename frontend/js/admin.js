@@ -320,6 +320,10 @@ function dashboardTab(panel) {
 function renderDashboard(out, d) {
   clear(out);
   if (d.suppressed) { out.append(h('p', { class: 'notice', text: d.reason })); return; }
+  if (d.syntheticN) {
+    out.append(h('p', { class: 'notice', role: 'note' }, h('strong', { text: 'Demodata: ' }),
+      `${d.syntheticN} af ${d.n} besvarelser er syntetiske demosvar. Slet dem under Spørgeskemaer, før resultaterne bruges.`));
+  }
   const sub = Object.fromEntries(d.subscales.map((x) => [x.code, x.name]));
   const dom = Object.fromEntries(d.domains.map((x) => [x.code, x.name]));
   out.append(h('div', { class: 'stats', role: 'group', 'aria-label': 'Nøgletal' },
@@ -414,7 +418,7 @@ function surveysTab(panel) {
     if (r) renderPreview(result, r, doc);
   });
   panel.append(heading('surveys', 'Spørgeskemaer'), h('section', { class: 'card' }, h('h3', { text: 'Importér' }), form, result),
-    assignmentSection(),
+    assignmentSection(), demoSection(),
     h('section', { class: 'card' }, h('h3', { text: 'Versioner' }), table('Versioner', ['Spørgeskema', 'Version', 'Status', 'Importeret', 'SHA-256', ''],
       app.surveys.flatMap((sv) => sv.versions.map((v) => row(`${sv.title} (${sv.surveyId})`, [String(v.versionNo), v.status,
         new Date(v.importedAt).toLocaleString('da-DK'), v.sha256.slice(0, 12) + '…',
@@ -423,6 +427,51 @@ function surveysTab(panel) {
           await guard(() => api('POST', `/api/admin/surveys/${v.id}/publish`, {}));
           await loadTenantData(); shell();
         } }) : '')]))))));
+}
+
+/** Syntetiske demosvar til afprøvning af resultater og rapporter. */
+function demoSection() {
+  const sec = h('section', { class: 'card' }, h('h3', { text: 'Demosvar (syntetiske)' }));
+  const intro = h('p', { class: 'hint', text: 'Generér falske besvarelser, så du kan afprøve resultater, analyser og rapporter. '
+    + 'De markeres som syntetiske, vises med en advarsel i resultater og rapporter og kan slettes igen med ét klik. Rigtige svar røres ikke.' });
+  if (!publishedVersions().length || !app.units.length) {
+    sec.append(intro, h('p', { class: 'notice', text: 'Kræver et publiceret spørgeskema og mindst én institution.' }));
+    return sec;
+  }
+  const e = err('demo-err');
+  const sv = versionSelect('demo-sv');
+  const per = h('input', { type: 'number', min: 1, max: 200, value: 15, inputmode: 'numeric' });
+  const picker = unitPicker();
+  picker.el.querySelector('.label').textContent = 'Institutioner og afdelinger (tom = alle afdelinger)';
+  const status = h('p', { class: 'status-line', role: 'status' });
+  const delBtn = h('button', { type: 'button', class: 'danger' }, icon('trash-2', 'icon-sm'), 'Slet alle demosvar');
+  const loadCount = async () => {
+    const c = await guard(() => api('GET', `/api/admin/demo-responses?tenantId=${app.tenantId}`));
+    if (!c) return;
+    status.textContent = c.total ? `Der er ${c.total} demosvar i organisationen.` : 'Der er ingen demosvar i organisationen.';
+    delBtn.hidden = !c.total;
+  };
+  delBtn.addEventListener('click', async () => {
+    if (!confirm('Slet alle syntetiske demosvar i organisationen? Rigtige besvarelser røres ikke.')) return;
+    const r = await guard(() => api('POST', '/api/admin/demo-responses/delete', { tenantId: app.tenantId }), e);
+    if (r) { announce(`${r.deleted} demosvar slettet`); loadCount(); }
+  });
+  const btn = h('button', { type: 'submit' }, 'Generér demosvar');
+  const form = h('form', { method: 'post', action: '/admin/' },
+    h('div', { class: 'filters' }, field('Spørgeskema', sv), field('Antal pr. afdeling', per, 'Mindst 10 for at undgå undertrykkelse'), picker.el),
+    e, h('div', { class: 'actions' }, btn, delBtn), status);
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    btn.disabled = true;
+    try {
+      const r = await guard(() => api('POST', '/api/admin/demo-responses', {
+        tenantId: app.tenantId, surveyVersionId: sv.value, perUnit: Number(per.value) || 15, unitIds: picker.value() }), e);
+      if (r) { announce(`${r.created} demosvar oprettet i ${r.units} afdelinger`); loadCount(); }
+    } finally { btn.disabled = false; }
+  });
+  sec.append(intro, form);
+  loadCount();
+  return sec;
 }
 
 /** Tildeling af spørgeskemaer til institutioner. Fratagelse stopper nye koder, men sletter intet. */

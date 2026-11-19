@@ -68,6 +68,7 @@ def build(ds: Dataset, f: Filters, k: int, sub_thr: float, dom_thr: float) -> di
                    reason="Filtreringen ville gøre det muligt at udlede resultater for en lille gruppe.")
         return out
     out["n"] = n
+    out["syntheticN"] = int(ds.responses["is_synthetic"].sum()) if "is_synthetic" in ds.responses else 0
     sub, dom = respondent_scores(ds, sub_thr, dom_thr)
 
     # 1. Subskalaprofil

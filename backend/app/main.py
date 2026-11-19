@@ -15,7 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .config import get_settings
 from .db import ping
 from .static_assets import VersionedStaticFiles
-from .routers import admin_analyses, admin_auth, admin_dashboard, admin_exports, admin_org, admin_surveys, public, respondent, system
+from .routers import admin_analyses, admin_auth, admin_dashboard, admin_demo, admin_exports, admin_org, admin_surveys, public, respondent, system
 
 log = logging.getLogger("app")
 
@@ -141,7 +141,7 @@ def create_app() -> FastAPI:
         ping()
         return {"status": "ok"}
 
-    for r in (respondent, admin_auth, admin_org, admin_surveys, admin_dashboard,
+    for r in (respondent, admin_auth, admin_org, admin_surveys, admin_dashboard, admin_demo,
               admin_analyses, admin_exports, system, public):
         app.include_router(r.router)
     # Frontend (vanilla HTML/JS) serveres af appen selv; TLS håndteres af ekstern reverse proxy.

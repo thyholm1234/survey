@@ -699,3 +699,36 @@ def test_edit_user_permissions(client, org):
         n = c.execute(text(f"SELECT COUNT(*) FROM {qualified('qa_audit', 'audit_events')} "
                            "WHERE action='user.permissions' AND target_id=:u"), {"u": target["id"]}).scalar()
     assert n == 2
+
+
+def test_synthetic_demo_responses(client, org):
+    t, csrf, school, daycare = org["tenant"], org["csrf"], org["units"]["school"], org["units"]["daycare"]
+    insert_responses(t, daycare, org["sv"], 3, seed=31)  # rigtige svar, der skal overleve sletningen
+    with get_engine().begin() as c:  # hjælperen markerer sine svar som syntetiske – gør dem "rigtige"
+        c.execute(text(f"UPDATE {qualified('qa_data', 'responses')} SET is_synthetic=0 WHERE tenant_id=:t"), {"t": t})
+    r = client.post("/api/admin/demo-responses", json={"tenantId": t, "surveyVersionId": org["sv"], "perUnit": 12},
+                    headers=H(csrf))
+    assert r.status_code == 201 and r.json() == {"created": 24, "units": 2}
+    assert client.get(f"/api/admin/demo-responses?tenantId={t}").json()["total"] == 24
+    d = client.get(f"/api/admin/dashboard?tenantId={t}&surveyVersionId={org['sv']}").json()
+    assert not d["suppressed"] and d["syntheticN"] >= 20 and d["n"] >= d["syntheticN"]
+    assert all(1 <= p["mean"] <= 6 for p in d["profile"] if not p["suppressed"])
+    # Rapporten advarer om demodata
+    r = client.post("/api/admin/exports", json={"tenantId": t, "format": "report_html",
+                                                "filters": {"surveyVersionId": org["sv"]}}, headers=H(csrf))
+    assert "DEMODATA" in r.text
+    # Valgte enheder
+    r = client.post("/api/admin/demo-responses", json={"tenantId": t, "surveyVersionId": org["sv"], "perUnit": 2,
+                                                       "unitIds": [school]}, headers=H(csrf))
+    assert r.json() == {"created": 2, "units": 1}
+    # Afdelingsadmin må ikke
+    ua = make_admin("unit.demo", [{"role_code": "unit_admin", "tenant_id": t, "unit_id": school}])
+    csrf_u = login(client, ua)
+    assert client.post("/api/admin/demo-responses/delete", json={"tenantId": t}, headers=H(csrf_u)).status_code == 404
+    csrf = login(client, org["admin"])
+    assert client.post("/api/admin/demo-responses/delete", json={"tenantId": t}, headers=H(csrf)).json() == {"deleted": 26}
+    with get_engine().connect() as c:
+        n = c.execute(text(f"SELECT COUNT(*) FROM {qualified('qa_data', 'responses')} WHERE tenant_id=:t"), {"t": t}).scalar()
+        orphans = c.execute(text(f"SELECT COUNT(*) FROM {qualified('qa_data', 'answers')} a LEFT JOIN "
+                                 f"{qualified('qa_data', 'responses')} r ON r.id=a.response_id WHERE r.id IS NULL")).scalar()
+    assert n == 3 and orphans == 0
